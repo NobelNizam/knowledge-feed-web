@@ -7,7 +7,27 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Crucial for sending/receiving HttpOnly cookies
 });
+
+export const authAPI = {
+  register: async (data: any) => {
+    const response = await api.post('/auth/register', data);
+    return response.data;
+  },
+  login: async (data: any) => {
+    const response = await api.post('/auth/login', data);
+    return response.data;
+  },
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    return response.data;
+  },
+  getMe: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+};
 
 export const feedAPI = {
   getFeed: async (limit = 20, offset = 0, domains?: string[]) => {
@@ -60,13 +80,13 @@ export const userAPI = {
     return response.data;
   },
 
-  updatePreferences: async (userId: string, domains: string[], readingLevel = 'intermediate') => {
-    const response = await api.put(`/user/${userId}/preferences`, { domains, readingLevel });
+  updatePreferences: async (domains: string[], readingLevel = 'intermediate') => {
+    const response = await api.put(`/user/preferences`, { domains, readingLevel });
     return response.data;
   },
 
-  saveCard: async (userId: string, cardId: string) => {
-    const response = await api.post(`/user/${userId}/save`, { cardId });
+  saveCard: async (cardId: string) => {
+    const response = await api.post(`/user/save`, { cardId });
     return response.data;
   },
 };

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { interactionAPI } from '@/lib/api';
+import { userAPI } from '@/lib/api';
+import { useAuth } from '@/lib/AuthContext';
+import { useRouter } from 'next/navigation';
 
 interface KnowledgeCardProps {
   card: {
@@ -40,9 +42,20 @@ const ICONS: Record<string, string> = {
 export default function KnowledgeCard({ card, isDetailView = false }: KnowledgeCardProps) {
   const domainColor = COLORS[card.domain?.toLowerCase()] || 'bg-gray-500';
   const domainIcon = ICONS[card.domain?.toLowerCase()] || '📚';
+  
+  const { user, refreshUser } = useAuth();
+  const router = useRouter();
 
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  
+  useEffect(() => {
+    if (user && user.savedCards) {
+      setSaved(user.savedCards.some((c: any) => c.id === card.id));
+    } else {
+      setSaved(false);
+    }
+  }, [user, card.id]);
   
   // Mock counts based on Prisma defaults if not provided
   const [likeCount, setLikeCount] = useState(card.saveCount || 0); // Using saveCount as placeholder for likes
@@ -53,13 +66,26 @@ export default function KnowledgeCard({ card, isDetailView = false }: KnowledgeC
     if (!liked) {
       setLiked(true);
       setLikeCount(prev => prev + 1);
-      await interactionAPI.likeCard(card.id);
+      // await interactionAPI.likeCard(card.id); // Placeholder for future API
     }
   };
 
-  const handleSave = (e: React.MouseEvent) => {
+  const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    
+    // Optimistic UI update
     setSaved(!saved);
+    try {
+      await userAPI.saveCard(card.id);
+      await refreshUser(); // Update global state
+    } catch (error) {
+      setSaved(saved); // Revert on failure
+      console.error('Failed to save card:', error);
+    }
   };
 
   const cardContent = isDetailView ? card.content : (

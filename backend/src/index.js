@@ -1,8 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
+const cookieParser = require('cookie-parser');
 
+const authRoutes = require('./routes/auth');
 const feedRoutes = require('./routes/feed');
 const knowledgeRoutes = require('./routes/knowledge');
 const userRoutes = require('./routes/user');
@@ -10,9 +14,22 @@ const userRoutes = require('./routes/user');
 const app = express();
 const prisma = new PrismaClient();
 
-// Middleware
-app.use(cors());
+// Security Middlewares
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+// Global Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+  message: { error: 'Too many requests from this IP' }
+});
+app.use('/api', globalLimiter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -24,6 +41,7 @@ app.get('/health', (req, res) => {
 });
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/user', userRoutes);

@@ -38,8 +38,9 @@ model KnowledgeCard {
 
 model User {
   id           String   @id @default(cuid())
-  name         String?
-  email        String?  @unique
+  name         String
+  email        String   @unique
+  password     String
   
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
