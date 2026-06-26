@@ -109,9 +109,9 @@ export const interactionAPI = {
     return { success: true, data: [] };
   },
 
-  addComment: async (cardId: string, text: string) => {
+  addComment: async (cardId: string, text: string, parentId?: string) => {
     // API Ready: POST /api/knowledge/:id/comments
-    return { success: true, data: { id: Date.now(), text, createdAt: new Date() } };
+    return { success: true, data: { id: Date.now(), text, parentId, createdAt: new Date() } };
   }
 };
 
