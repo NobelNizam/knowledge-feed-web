@@ -3,3 +3,4 @@ backend/.env
 backend/.env.example
 web/.next/
 web/node_modules/
+AGENT_MEMORY.md
