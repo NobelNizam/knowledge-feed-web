@@ -1,0 +1,67 @@
+// Prisma Schema - Part 1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model KnowledgeCard {
+  id              String   @id @default(cuid())
+  title           String
+  content         String
+  type            String   @default("QUICK_FACT")
+  
+  domain          String
+  tags            String[]
+  
+  sourceUrl       String?  @map("source_url")
+  sourceName      String?  @map("source_name")
+  
+  aiModel         String?  @map("ai_model")
+  generatedAt     DateTime @default(now()) @map("generated_at")
+  
+  viewCount       Int      @default(0) @map("view_count")
+  saveCount       Int      @default(0) @map("save_count")
+  engagementScore Float    @default(0) @map("engagement_score")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  savedBy         User[]   @relation("SavedCards")
+  
+  @@map("knowledge_cards")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String?  @unique
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  
+  preferences  UserPreferences?
+  savedCards   KnowledgeCard[] @relation("SavedCards")
+  
+  @@map("users")
+}
+
+model UserPreferences {
+  id            String   @id @default(cuid())
+  userId        String   @unique @map("user_id")
+  domains       String[]
+  readingLevel  String   @default("intermediate") @map("reading_level")
+  
+  dailyDigest   Boolean  @default(true) @map("daily_digest")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_preferences")
+}
