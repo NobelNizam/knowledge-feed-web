@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const feedRoutes = require('./routes/feed');
 const knowledgeRoutes = require('./routes/knowledge');
 const userRoutes = require('./routes/user');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -45,6 +46,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -58,9 +60,11 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Knowledge Feed API running on port ${PORT}`);
-});
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`Knowledge Feed API running on port ${PORT}`);
+  });
+}
 
 module.exports = { app, prisma };

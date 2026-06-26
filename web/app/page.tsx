@@ -230,10 +230,15 @@ export default function Home() {
             <p className="text-sm text-gray-500">Transform scrolling into knowledge</p>
           </div>
           <div className="flex gap-4 items-center">
-            <Link href="/profile" className="text-blue-600 font-medium hover:underline">
+            {user.role === 'ADMIN' && (
+              <Link href="/admin" className="text-indigo-600 font-extrabold text-sm hover:underline bg-indigo-50 px-3 py-1.5 rounded-lg shadow-sm border border-indigo-100">
+                ⚡ Admin Panel
+              </Link>
+            )}
+            <Link href="/profile" className="text-blue-600 font-bold hover:underline">
               {user.name}
             </Link>
-            <button onClick={logout} className="text-gray-500 hover:text-red-500 text-sm font-medium">
+            <button onClick={logout} className="text-slate-400 hover:text-red-500 text-sm font-bold transition-colors">
               Logout
             </button>
           </div>

@@ -8,6 +8,7 @@ const authMiddleware = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'fallback_refresh_secret';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -15,13 +16,38 @@ const authLimiter = rateLimit({
   message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
 });
 
-const setTokenCookie = (res, token) => {
-  res.cookie('token', token, {
+const crypto = require('crypto');
+
+const setTokenCookie = (res, token, isRefresh = false) => {
+  const maxAge = isRefresh ? 7 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
+  const cookieName = isRefresh ? 'refreshToken' : 'token';
+  res.cookie(cookieName, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    maxAge
   });
+};
+
+const generateTokens = async (userId, role, req) => {
+  const accessToken = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '15m' });
+  const uniqueId = crypto.randomBytes(16).toString('hex');
+  const refreshToken = jwt.sign({ userId, role, jti: uniqueId }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+  
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+  
+  await prisma.session.create({
+    data: {
+      userId,
+      refreshToken,
+      userAgent: req.headers['user-agent'] || null,
+      ipAddress: req.ip || null,
+      expiresAt,
+    }
+  });
+  
+  return { accessToken, refreshToken };
 };
 
 router.post('/register', authLimiter, async (req, res) => {
@@ -52,11 +78,12 @@ router.post('/register', authLimiter, async (req, res) => {
           create: { domains: [] },
         },
       },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, role: true },
     });
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    setTokenCookie(res, token);
+    const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
+    setTokenCookie(res, accessToken, false);
+    setTokenCookie(res, refreshToken, true);
     
     res.status(201).json({ success: true, user });
   } catch (error) {
@@ -83,8 +110,9 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    setTokenCookie(res, token);
+    const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
+    setTokenCookie(res, accessToken, false);
+    setTokenCookie(res, refreshToken, true);
     
     const { password: _, ...userWithoutPassword } = user;
     res.json({ success: true, user: userWithoutPassword });
@@ -94,13 +122,53 @@ router.post('/login', authLimiter, async (req, res) => {
   }
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+  if (refreshToken) {
+    await prisma.session.deleteMany({ where: { refreshToken } }).catch(() => {});
+  }
+
   res.clearCookie('token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   });
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  });
   res.json({ success: true });
+});
+
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.cookies;
+  
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token not found' });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+    const session = await prisma.session.findUnique({ where: { refreshToken } });
+    
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+    
+    if (session.expiresAt < new Date()) {
+      await prisma.session.delete({ where: { id: session.id } });
+      return res.status(401).json({ error: 'Refresh token expired' });
+    }
+
+    // Generate new access token
+    const accessToken = jwt.sign({ userId: decoded.userId, role: decoded.role }, JWT_SECRET, { expiresIn: '15m' });
+    setTokenCookie(res, accessToken, false);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid refresh token' });
+  }
 });
 
 router.get('/me', authMiddleware, async (req, res) => {

@@ -36,19 +36,41 @@ model KnowledgeCard {
   @@map("knowledge_cards")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
   password     String
+  role         Role     @default(USER)
   
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   
   preferences  UserPreferences?
   savedCards   KnowledgeCard[] @relation("SavedCards")
+  sessions     Session[]
   
   @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  refreshToken String   @unique @map("refresh_token")
+  userAgent    String?  @map("user_agent")
+  ipAddress    String?  @map("ip_address")
+  expiresAt    DateTime @map("expires_at")
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
 }
 
 model UserPreferences {
