@@ -4,3 +4,5 @@ backend/.env.example
 web/.next/
 web/node_modules/
 AGENT_MEMORY.md
+*storybook.log
+storybook-static

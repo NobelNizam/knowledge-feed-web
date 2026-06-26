@@ -14,6 +14,23 @@ module.exports = {
         arts: '#10B981',
         nature: '#06B6D4',
       },
+      animation: {
+        blob: 'blob 7s infinite',
+        pop: 'pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      },
+      keyframes: {
+        blob: {
+          '0%': { transform: 'translate(0px, 0px) scale(1)' },
+          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+          '100%': { transform: 'translate(0px, 0px) scale(1)' },
+        },
+        pop: {
+          '0%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.4)' },
+          '100%': { transform: 'scale(1)' },
+        }
+      }
     },
   },
   plugins: [],

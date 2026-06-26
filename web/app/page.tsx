@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Virtuoso } from 'react-virtuoso';
-import KnowledgeCard from '@/components/KnowledgeCard';
+import PremiumCard from '@/components/PremiumCard';
 import { feedAPI, knowledgeAPI, userAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -218,8 +218,12 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm sticky top-0 z-20">
+    <div className="min-h-screen flex flex-col relative overflow-hidden" style={{ background: '#f8fafc' }}>
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob pointer-events-none"></div>
+      <div className="absolute top-[20%] right-[-10%] w-[50%] h-[50%] bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 pointer-events-none"></div>
+      <div className="absolute bottom-[-20%] left-[20%] w-[50%] h-[50%] bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000 pointer-events-none"></div>
+      
+      <header className="bg-white/70 backdrop-blur-xl shadow-sm sticky top-0 z-20 border-b border-white/20">
         <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">📚 Knowledge Feed</h1>
@@ -310,8 +314,8 @@ export default function Home() {
               data={cards}
               overscan={1000}
               itemContent={(_index, card) => (
-                <div className="pb-4">
-                  <KnowledgeCard card={card} />
+                <div className="pb-4 relative z-10">
+                  <PremiumCard card={card} />
                 </div>
               )}
               components={{
