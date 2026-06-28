@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { feedAPI, userAPI, knowledgeAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import { useFilter } from '@/lib/FilterContext';
+import { DOMAIN_LEVEL1_LIST } from '@/lib/domainMapping';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
-import { RefreshCw, CheckCircle2, ChevronRight, BookOpen, AlertCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, ChevronRight, BookOpen, AlertCircle, Filter, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
+  const { activeFilter, toggleFilter } = useFilter();
 
   // Interface untuk state feed per tab
   interface TabFeedState {
@@ -21,14 +24,13 @@ export default function Home() {
     scrollPosition: number;
   }
 
-  // State untuk seluruh Feed per domain
+  // State untuk seluruh Feed per filter
   const [feeds, setFeeds] = useState<Record<string, TabFeedState>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State untuk Filter & UI
-  const [activeDomain, setActiveDomain] = useState<string | null>(null);
+  // State untuk UI
   const [availableDomains, setAvailableDomains] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullProgress, setPullProgress] = useState(0);
@@ -37,7 +39,10 @@ export default function Home() {
   const [isRestoring, setIsRestoring] = useState(true);
 
   // Selector helper untuk feed domain aktif
-  const currentDomainKey = activeDomain ?? '__all__';
+  const currentDomainKey = activeFilter.type === 'all' 
+    ? '__all__' 
+    : `${activeFilter.type}_${activeFilter.value}`;
+
   const currentFeed = feeds[currentDomainKey] || {
     cards: [],
     seenIds: [],
@@ -52,12 +57,6 @@ export default function Home() {
 
   const limit = 10;
   
-  // Drag to scroll carousel
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-
   // Pull to refresh touch handlers
   const touchStartRef = useRef(0);
 
@@ -65,7 +64,6 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedStates = sessionStorage.getItem('feed_tab_states');
-      const savedDomain = sessionStorage.getItem('feed_active_domain');
       
       let parsedStates: Record<string, TabFeedState> = {};
       if (savedStates) {
@@ -82,17 +80,11 @@ export default function Home() {
         setFeeds(parsedStates);
       }
       
-      if (savedDomain !== null && savedDomain !== undefined) {
-        const activeDomainKey = savedDomain === 'null' ? null : savedDomain;
-        setActiveDomain(activeDomainKey);
-        
-        const domainKeyStr = activeDomainKey ?? '__all__';
-        const activeState = parsedStates[domainKeyStr];
-        if (activeState && activeState.cards.length > 0) {
-          const scrollVal = sessionStorage.getItem(`scroll_pos_${domainKeyStr}`);
-          const scrollPos = scrollVal ? Number(scrollVal) : (activeState.scrollPosition || 0);
-          setTimeout(() => window.scrollTo(0, scrollPos), 100);
-        }
+      const activeState = parsedStates[currentDomainKey];
+      if (activeState && activeState.cards.length > 0) {
+        const scrollVal = sessionStorage.getItem(`scroll_pos_${currentDomainKey}`);
+        const scrollPos = scrollVal ? Number(scrollVal) : (activeState.scrollPosition || 0);
+        setTimeout(() => window.scrollTo(0, scrollPos), 100);
       }
     }
     setIsRestoring(false);
@@ -101,16 +93,15 @@ export default function Home() {
   // Save scroll position constantly to sessionStorage to minimize React re-renders
   useEffect(() => {
     const handleScroll = () => {
-      const currentKey = activeDomain ?? '__all__';
-      sessionStorage.setItem(`scroll_pos_${currentKey}`, window.scrollY.toString());
+      sessionStorage.setItem(`scroll_pos_${currentDomainKey}`, window.scrollY.toString());
       
       // Update juga di tab state secara pasif
       setFeeds(prev => {
-        const target = prev[currentKey];
+        const target = prev[currentDomainKey];
         if (target) {
           return {
             ...prev,
-            [currentKey]: {
+            [currentDomainKey]: {
               ...target,
               scrollPosition: window.scrollY
             }
@@ -121,7 +112,7 @@ export default function Home() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [activeDomain]);
+  }, [currentDomainKey]);
 
   // Check auth and onboarding
   useEffect(() => {
@@ -141,10 +132,9 @@ export default function Home() {
     }
   }, [user, authLoading, router]);
 
-  // Load feed when activeDomain changes
+  // Load feed ketika filter global berubah
   useEffect(() => {
     if (user && isInitialized && !isRestoring) {
-      const currentDomainKey = activeDomain ?? '__all__';
       const targetFeed = feeds[currentDomainKey];
       
       if (targetFeed && targetFeed.cards.length > 0) {
@@ -153,10 +143,10 @@ export default function Home() {
         const scrollPos = scrollVal ? Number(scrollVal) : (targetFeed.scrollPosition || 0);
         setTimeout(() => window.scrollTo(0, scrollPos), 50);
       } else {
-        loadFeed(0, true, activeDomain);
+        loadFeed(0, true, activeFilter);
       }
     }
-  }, [activeDomain, user, isInitialized, isRestoring]);
+  }, [currentDomainKey, user, isInitialized, isRestoring]);
 
   const fetchAvailableDomains = async () => {
     try {
@@ -166,14 +156,13 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Failed to fetch domains");
-      // Fallback dinamis jika API gagal
       setAvailableDomains(['science', 'history', 'technology', 'philosophy', 'arts', 'nature']);
     }
   };
 
-  const loadFeed = async (newOffset: number, reset = false, domain = activeDomain) => {
+  const loadFeed = async (newOffset: number, reset = false, filter = activeFilter) => {
     if (!user) return;
-    const domainKey = domain ?? '__all__';
+    const domainKey = filter.type === 'all' ? '__all__' : `${filter.type}_${filter.value}`;
     
     if (reset) {
       setLoading(true);
@@ -187,11 +176,8 @@ export default function Home() {
       const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
       const querySeenIds = reset ? [] : targetFeed.seenIds;
 
-      if (domain) {
-        res = await feedAPI.getFeed(limit, newOffset, [domain], querySeenIds);
-      } else {
-        res = await feedAPI.getFeed(limit, newOffset, undefined, querySeenIds);
-      }
+      const filterDomains = filter.type !== 'all' ? filter.domains : undefined;
+      res = await feedAPI.getFeed(limit, newOffset, filterDomains, querySeenIds);
 
       if (res.success) {
         const incomingCards = res.data || [];
@@ -247,7 +233,7 @@ export default function Home() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     setError(null);
-    const domainKey = activeDomain ?? '__all__';
+    const domainKey = currentDomainKey;
     const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
     
     try {
@@ -279,7 +265,6 @@ export default function Home() {
           return updated;
         });
         
-        // Scroll ke atas dengan halus agar user melihat konten baru
         setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
       }
     } catch (e: any) {
@@ -289,34 +274,6 @@ export default function Home() {
       setIsRefreshing(false);
       setPullProgress(0);
     }
-  };
-
-  const handleDomainSelect = (domain: string | null) => {
-    const prevDomainKey = activeDomain ?? '__all__';
-    const nextDomainKey = domain ?? '__all__';
-    
-    if (prevDomainKey === nextDomainKey) return;
-    
-    // 1. Simpan scroll position domain lama terlebih dahulu ke state dan sessionStorage
-    const currentScrollY = window.scrollY;
-    sessionStorage.setItem(`scroll_pos_${prevDomainKey}`, currentScrollY.toString());
-    
-    setFeeds(prev => {
-      const prevFeed = prev[prevDomainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
-      const updated = {
-        ...prev,
-        [prevDomainKey]: {
-          ...prevFeed,
-          scrollPosition: currentScrollY
-        }
-      };
-      sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
-      return updated;
-    });
-
-    // 2. Aktifkan tab baru
-    setActiveDomain(domain);
-    sessionStorage.setItem('feed_active_domain', domain === null ? 'null' : domain);
   };
 
   // --- Touch & Scroll Handlers ---
@@ -332,7 +289,7 @@ export default function Home() {
     if (touchStartRef.current > 0 && window.scrollY <= 0) {
       const pull = e.touches[0].clientY - touchStartRef.current;
       if (pull > 0 && pull < 150) {
-        setPullProgress(pull / 150); // 0 to 1
+        setPullProgress(pull / 150);
         if (e.cancelable) e.preventDefault();
       }
     }
@@ -347,22 +304,6 @@ export default function Home() {
     touchStartRef.current = 0;
   };
 
-  // Carousel Drag Handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!carouselRef.current) return;
-    setIsDragging(true);
-    setStartX(e.pageX - carouselRef.current.offsetLeft);
-    setScrollLeft(carouselRef.current.scrollLeft);
-  };
-  const handleMouseLeave = () => setIsDragging(false);
-  const handleMouseUp = () => setIsDragging(false);
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !carouselRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - carouselRef.current.offsetLeft;
-    const walk = (x - startX) * 2;
-    carouselRef.current.scrollLeft = scrollLeft - walk;
-  };
 
   if (authLoading) {
     return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-muted-foreground w-8 h-8" /></div>;
@@ -386,7 +327,7 @@ export default function Home() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      {/* Top action bar - Desktop refresh & Domain Filter */}
+      {/* Top action bar - Mobile/Desktop Feed Header */}
       <div className="sticky top-0 z-10 bg-background/70 backdrop-blur-md border-b border-border/55 shadow-sm">
         {/* Pull to refresh indicator */}
         <div 
@@ -400,99 +341,56 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-3 relative max-w-2xl mx-auto w-full">
-          <div className="flex items-center w-full overflow-hidden relative">
-            <h1 className="text-xl font-bold md:hidden mr-3 shrink-0">For You</h1>
-            
-            {/* Gradient mask overlays for smooth scroll indicator */}
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 hidden md:block" />
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 hidden md:block" />
-
-            <div 
-              ref={carouselRef}
-              className="hidden md:flex overflow-x-auto no-scrollbar gap-2 cursor-grab active:cursor-grabbing px-6 py-1 w-full scroll-smooth"
-              onMouseDown={handleMouseDown}
-              onMouseLeave={handleMouseLeave}
-              onMouseUp={handleMouseUp}
-              onMouseMove={handleMouseMove}
-            >
-              <button
-                onClick={() => handleDomainSelect(null)}
-                className={cn(
-                  "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-300",
-                  activeDomain === null 
-                    ? "bg-foreground text-background border-foreground shadow-sm scale-105" 
-                    : "bg-background/40 text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground"
-                )}
-              >
-                Semua
-              </button>
-              {availableDomains.map((domain) => (
-                <button
-                  key={domain}
-                  onClick={() => handleDomainSelect(domain)}
-                  className={cn(
-                    "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-300 capitalize",
-                    activeDomain === domain 
-                      ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" 
-                      : "bg-background/40 text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground"
-                  )}
-                >
-                  {domain}
-                </button>
-              ))}
-            </div>
+        <div className="flex items-center justify-between p-4 max-w-2xl mx-auto w-full">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-primary tracking-wider uppercase">Feeds</span>
+            <h1 className="text-xl font-extrabold text-foreground capitalize tracking-tight">
+              {activeFilter.type === 'all' ? 'For You' : activeFilter.value}
+            </h1>
           </div>
           
-          <button 
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="hidden md:flex p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
-            title="Refresh Feed"
-          >
-            <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
-          </button>
-        </div>
-
-        {/* Mobile Domain Filter with gradients */}
-        <div className="md:hidden relative border-t border-border/40">
-          <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
-          <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
-          
-          <div 
-            className="flex overflow-x-auto no-scrollbar gap-2 px-3 pb-3 pt-2 scroll-smooth"
-          >
-            <button
-              onClick={() => handleDomainSelect(null)}
-              className={cn(
-                "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
-                activeDomain === null 
-                  ? "bg-foreground text-background border-foreground shadow-sm" 
-                  : "bg-background/40 text-muted-foreground border-border"
-              )}
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+              title="Refresh Feed"
             >
-              Semua
+              <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
             </button>
-            {availableDomains.map((domain) => (
-              <button
-                key={domain}
-                onClick={() => handleDomainSelect(domain)}
-                className={cn(
-                  "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 capitalize",
-                  activeDomain === domain 
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                    : "bg-background/40 text-muted-foreground border-border"
-                )}
-              >
-                {domain}
-              </button>
-            ))}
+            
+            {/* Tombol Filter Khusus Mobile */}
+            <button
+              onClick={toggleFilter}
+              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors md:hidden"
+              title="Toggle Filter"
+            >
+              <Filter className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main Feed Content */}
       <div className="flex-1 w-full max-w-2xl mx-auto">
+        {/* Level 1 Domain Info Card */}
+        {activeFilter.type === 'level1' && (
+          <div className="m-4 p-5 bg-card/45 border border-border/80 rounded-2xl animate-in slide-in-from-top duration-300 shadow-sm relative overflow-hidden flex gap-4">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-bl-full pointer-events-none" />
+            <div className="p-3 h-fit rounded-xl bg-primary/10 text-primary shrink-0">
+              <Info className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-primary tracking-wider uppercase">Domain Rumpun Ilmu</span>
+              <h2 className="text-lg font-bold text-foreground mt-0.5">{activeFilter.value}</h2>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                {DOMAIN_LEVEL1_LIST.find(d => d.name === activeFilter.value)?.description || 
+                 "Cabang rumpun ilmu pengetahuan terintegrasi."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {error && !loading && (
           <div className="m-4 p-4 bg-destructive/10 text-destructive rounded-xl flex items-center border border-destructive/20 animate-in fade-in">
             <AlertCircle className="w-5 h-5 mr-3 shrink-0" />

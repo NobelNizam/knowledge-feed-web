@@ -1,13 +1,15 @@
 'use client';
 
-import { Home, Search, User, ShieldCheck } from "lucide-react";
+import { Home, Search, User, ShieldCheck, Filter } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+import { useFilter } from "@/lib/FilterContext";
 
 function LeftSidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { toggleFilter, isFilterOpen } = useFilter();
 
   if (pathname === '/login' || pathname === '/register') {
     return null;
@@ -37,6 +39,16 @@ function LeftSidebar() {
           <User className="h-6 w-6" />
           <p className="max-lg:hidden">Profile</p>
         </Link>
+        
+        {/* Tombol menu Filter */}
+        <button
+          onClick={toggleFilter}
+          className={`relative flex justify-start gap-4 rounded-lg p-4 hover:bg-accent hover:text-accent-foreground transition-all ${isFilterOpen ? 'bg-primary/10 text-primary border-l-4 border-primary font-semibold' : 'text-foreground'}`}
+        >
+          <Filter className="h-6 w-6" />
+          <p className="max-lg:hidden">Filter Pengetahuan</p>
+        </button>
+
         {user?.role === 'ADMIN' && (
           <Link 
             href="/admin" 

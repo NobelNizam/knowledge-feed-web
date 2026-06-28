@@ -36,7 +36,9 @@ router.get('/', async (req, res) => {
     const userId = getUserId(req);
     
     const domainFilter = domains ? domains.split(',') : null;
-    const domainTarget = domainFilter && domainFilter.length > 0 ? domainFilter[0] : '__all__';
+    const domainTarget = domainFilter && domainFilter.length > 0 
+      ? (domainFilter.length === 1 ? domainFilter[0] : `multi:${[...domainFilter].sort().join(',')}`) 
+      : '__all__';
 
     let excludeIds = [];
     if (seenIds) {
@@ -134,7 +136,9 @@ router.post('/personalized', async (req, res) => {
       return res.status(400).json({ error: 'Domains required' });
     }
 
-    const domainTarget = domains[0];
+    const domainTarget = domains && domains.length > 0 
+      ? (domains.length === 1 ? domains[0] : `multi:${[...domains].sort().join(',')}`) 
+      : '__all__';
     let excludeIds = seenIds || [];
 
     let cachedCards = await getDomainCache(domainTarget);
