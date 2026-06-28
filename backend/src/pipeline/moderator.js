@@ -23,16 +23,24 @@ const REVIEW_KEYWORDS = [
   'alternative medicine', 'pseudoscience',
 ];
 
-// Domain yang diperbolehkan
+// Domain yang diperbolehkan (Level 2 Disciplines)
 const ALLOWED_DOMAINS = [
-  'sains', 'sejarah', 'teknologi', 'filosofi', 'seni',
-  'alam', 'psikologi', 'luar angkasa', 'matematika',
-  'kesehatan', 'sosial', 'ekonomi', 'pendidikan',
-  'science', 'history', 'technology', 'philosophy', 'art',
-  'nature', 'psychology', 'space', 'mathematics',
-  'health', 'social', 'economics', 'education',
-  'machine learning', 'artificial intelligence', 'computer science',
-  'physics', 'biology', 'chemistry',
+  // Formal Sciences
+  'Mathematics', 'Logic', 'Statistics', 'Theoretical Computer Science', 'Information Theory', 'Complex Systems', 'Decision Science', 'Game Theory',
+  // Natural Sciences
+  'Physics', 'Chemistry', 'Biology', 'Earth Science', 'Astronomy',
+  // Engineering & Technology
+  'Mechanical Engineering', 'Electrical Engineering', 'Computer Engineering', 'Civil Engineering', 'Chemical Engineering', 'Aerospace Engineering', 'Industrial Engineering', 'Nuclear Engineering', 'Environmental Engineering', 'Materials Engineering', 'Marine Engineering', 'Biomedical Engineering', 'Mechatronics', 'Artificial Intelligence',
+  // Medical & Health Sciences
+  'Anatomy', 'Physiology', 'Pathology', 'Pharmacology', 'Surgery', 'Internal Medicine', 'Pediatrics', 'Psychiatry', 'Neurology', 'Cardiology', 'Oncology', 'Radiology', 'Public Health', 'Epidemiology', 'Nutrition', 'Dentistry', 'Nursing', 'Rehabilitation', 'Sports Medicine',
+  // Agricultural & Environmental Sciences
+  'Agriculture', 'Agronomy', 'Soil Science', 'Forestry', 'Fisheries', 'Aquaculture', 'Veterinary Medicine', 'Animal Science', 'Food Science', 'Environmental Science', 'Sustainability', 'Climate Science', 'Conservation Biology',
+  // Social Sciences
+  'Economics', 'Psychology', 'Sociology', 'Anthropology', 'Political Science', 'International Relations', 'Public Administration', 'Law', 'Criminology', 'Communication', 'Education', 'Human Geography', 'Demography', 'Urban Studies', 'Business',
+  // Humanities & Arts
+  'Philosophy', 'History', 'Archaeology', 'Linguistics', 'Literature', 'Religious Studies', 'Classics', 'Cultural Studies', 'Performing Arts', 'Music', 'Visual Arts', 'Film Studies', 'Architecture', 'Design',
+  // Interdisciplinary Sciences
+  'Data Science', 'Data Engineering', 'Bioinformatics', 'Computational Biology', 'Systems Biology', 'Computational Chemistry', 'Computational Physics', 'Scientific Computing', 'Human-Computer Interaction', 'Computational Linguistics', 'Cognitive Science', 'Neuroscience', 'Behavioral Science', 'Complexity Science', 'Network Science', 'Digital Humanities', 'Geoinformatics', 'Geographic Information Systems', 'Cybersecurity', 'Quantum Computing', 'FinTech', 'Health Informatics', 'Medical Imaging', 'Computational Social Science', 'Educational Technology', 'Explainable AI', 'AI Alignment', 'AI Safety', 'Synthetic Biology', 'Precision Medicine', 'Computational Economics', 'Climate Informatics', 'Digital Twin Systems'
 ];
 
 // Batasan konten

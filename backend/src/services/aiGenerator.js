@@ -60,8 +60,8 @@ async function generateWithRAG({ count = 5, domains = null, context = '', citati
   }
 
   const domainPrompt = domains && domains.length > 0
-    ? `PENTING: Pilih HANYA SATU domain dari daftar ini untuk setiap kartu: ${domains.join(', ')}. Jangan menggabungkan dua domain!`
-    : `Pilih secara acak HANYA SATU domain dari daftar berikut untuk setiap kartu: sains, teknologi, sejarah, filosofi, seni, psikologi, kesehatan, luar angkasa, coding, matematika, ekonomi, hukum, lingkungan, sosiologi, geografi, astronomi, biologi, fisika, kimia, bahasa, musik, olahraga, kuliner, pertanian.`;
+    ? `PENTING: Pilih HANYA SATU disiplin ilmu (Level 2) dari daftar ini untuk setiap kartu: ${domains.join(', ')}. Jangan menggabungkan atau memodifikasi nama disiplin tersebut!`
+    : `Pilih secara acak HANYA SATU disiplin ilmu (Level 2) akademis formal dalam Bahasa Inggris untuk setiap kartu (contoh: "Physics", "Artificial Intelligence", "Microbiology", "Astronomy", "Theoretical Computer Science", "Economics", "Psychology", "Linguistics", "Agriculture", "Philosophy", "History"). Pastikan nama disiplin ditulis dalam bahasa Inggris baku dengan huruf kapital di awal setiap kata.`;
 
   const contextPrompt = context
     ? `\nKONTEKS REFERENSI (gunakan informasi ini sebagai sumber utama):\n${context}\n\nINSTRUKSI PENTING: Buat konten berdasarkan konteks referensi di atas. Setiap fakta HARUS berdasarkan informasi dari referensi yang disediakan. Sertakan kutipan sumber jika memungkinkan.`
@@ -71,7 +71,7 @@ async function generateWithRAG({ count = 5, domains = null, context = '', citati
 Buatlah ${count} fakta menarik (knowledge cards) dalam bahasa Indonesia.
 ${domainPrompt}
 ${contextPrompt}
-
+ 
 Gaya bahasa:
 - Santai, seru, dan mudah dicerna (casual, cocok untuk dibaca di sela-sela waktu luang).
 - Hindari bahasa yang terlalu baku atau kaku, gunakan bahasa sehari-hari yang sopan dan asyik.
@@ -83,7 +83,7 @@ Berikan HANYA array JSON murni (tanpa tag markdown \`\`\`json) dengan format obj
   {
     "title": "Judul Menarik (Singkat)",
     "content": "Isi fakta yang seru dan mudah dipahami, maksimal 2-3 kalimat. Sertakan referensi jika berdasarkan sumber ilmiah.",
-    "domain": "hanya satu kata tunggal (misal: sains)",
+    "domain": "Nama disiplin ilmu Level 2 dalam Bahasa Inggris baku (misal: Physics, Artificial Intelligence, Linguistics)",
     "tags": ["tag1", "tag2", "tag3"],
     "citations": ["Judul sumber yang dikutip (jika ada)"]
   }

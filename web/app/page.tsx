@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { feedAPI, userAPI, knowledgeAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useFilter } from '@/lib/FilterContext';
-import { DOMAIN_LEVEL1_LIST, getDisciplineDescription } from '@/lib/domainMapping';
+import { DOMAIN_LEVEL1_LIST, getDisciplineDescription, DOMAIN_LEVEL2_MAP } from '@/lib/domainMapping';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { RefreshCw, CheckCircle2, ChevronRight, BookOpen, AlertCircle, Filter, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,8 +13,7 @@ import { cn } from '@/lib/utils';
 export default function Home() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
-  const { activeFilter, toggleFilter } = useFilter();
-
+  
   // Interface untuk state feed per tab
   interface TabFeedState {
     cards: any[];
@@ -24,25 +23,24 @@ export default function Home() {
     scrollPosition: number;
   }
 
-  // State untuk seluruh Feed per filter
   const [feeds, setFeeds] = useState<Record<string, TabFeedState>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State untuk UI
-  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullProgress, setPullProgress] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
-
-  // Selector helper untuk feed domain aktif
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showPreferencesAlert, setShowPreferencesAlert] = useState(false);
+  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const { activeFilter, toggleFilter } = useFilter();
+  
   const currentDomainKey = activeFilter.type === 'all' 
     ? '__all__' 
     : `${activeFilter.type}_${activeFilter.value}`;
-
+    
   const currentFeed = feeds[currentDomainKey] || {
     cards: [],
     seenIds: [],
@@ -67,17 +65,42 @@ export default function Home() {
       
       let parsedStates: Record<string, TabFeedState> = {};
       if (savedStates) {
-        parsedStates = JSON.parse(savedStates);
-        
-        // Pulihkan scroll position dari fallback key jika tersimpan
-        Object.keys(parsedStates).forEach(key => {
-          const scrollVal = sessionStorage.getItem(`scroll_pos_${key}`);
-          if (scrollVal) {
-            parsedStates[key].scrollPosition = Number(scrollVal);
+        try {
+          parsedStates = JSON.parse(savedStates);
+          
+          // Periksa apakah ada domain lama (usang) di cache local
+          let isCacheStale = false;
+          const allValidLevel2 = new Set(
+            Object.values(DOMAIN_LEVEL2_MAP)
+              .flat()
+              .map(d => d.name.toLowerCase())
+          );
+
+          for (const tabState of Object.values(parsedStates)) {
+            if (tabState.cards && tabState.cards.some((card: any) => !allValidLevel2.has((card.domain || '').toLowerCase()))) {
+              isCacheStale = true;
+              break;
+            }
           }
-        });
-        
-        setFeeds(parsedStates);
+
+          if (isCacheStale) {
+            console.log("[FeedCache] Stale domain cache detected (legacy domains). Clearing local cache.");
+            sessionStorage.removeItem('feed_tab_states');
+            parsedStates = {};
+          } else {
+            // Pulihkan scroll position dari fallback key jika tersimpan
+            Object.keys(parsedStates).forEach(key => {
+              const scrollVal = sessionStorage.getItem(`scroll_pos_${key}`);
+              if (scrollVal) {
+                parsedStates[key].scrollPosition = Number(scrollVal);
+              }
+            });
+            
+            setFeeds(parsedStates);
+          }
+        } catch (e) {
+          console.error("Failed to parse saved filter state", e);
+        }
       }
       
       const activeState = parsedStates[currentDomainKey];

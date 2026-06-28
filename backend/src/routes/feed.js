@@ -217,7 +217,16 @@ router.post('/personalized', async (req, res) => {
 // POST /api/feed/refresh - Sync generate 5 items for pull-to-refresh
 router.post('/refresh', async (req, res) => {
   try {
-    const ALL_DOMAINS = ['sains', 'teknologi', 'sejarah', 'filosofi', 'seni', 'psikologi', 'kesehatan', 'luar angkasa', 'coding', 'matematika', 'ekonomi', 'hukum', 'lingkungan', 'sosiologi', 'geografi', 'astronomi', 'biologi', 'fisika', 'kimia', 'bahasa', 'musik', 'olahraga', 'kuliner', 'pertanian'];
+    const ALL_DOMAINS = [
+      'Mathematics', 'Theoretical Computer Science', 'Statistics',
+      'Physics', 'Chemistry', 'Biology', 'Astronomy', 'Earth Science',
+      'Computer Engineering', 'Artificial Intelligence',
+      'Public Health', 'Neurology', 'Pharmacology',
+      'Agriculture', 'Environmental Science', 'Climate Science',
+      'Economics', 'Psychology', 'Sociology', 'Education',
+      'Philosophy', 'History', 'Linguistics', 'Visual Arts',
+      'Data Science', 'Neuroscience', 'Quantum Computing', 'Cybersecurity', 'AI Safety'
+    ];
     
     // Pick 5 random topics for generation to keep it diverse
     const shuffledTopics = ALL_DOMAINS.sort(() => 0.5 - Math.random());
