@@ -8,6 +8,7 @@ const { createPipelineJob } = require('../pipeline/publisher');
 const { addPipelineJob } = require('../queue/queueManager');
 const { getDomainCache, setDomainCache, invalidateUserCache } = require('../services/cacheService');
 const { executePipeline } = require('../queue/workers/pipelineWorker');
+const { resolveFilterToTopics } = require('../services/domainHierarchy');
 
 // Middleware helper untuk get userId jika ada auth, jika tidak null
 const getUserId = (req) => req.user ? req.user.id : null;
@@ -214,27 +215,24 @@ router.post('/personalized', async (req, res) => {
   }
 });
 
-// POST /api/feed/refresh - Sync generate 5 items for pull-to-refresh
+// POST /api/feed/refresh - Sync generate 5 items for pull-to-refresh (filter-aware)
 router.post('/refresh', async (req, res) => {
   try {
-    const ALL_DOMAINS = [
-      'Mathematics', 'Theoretical Computer Science', 'Statistics',
-      'Physics', 'Chemistry', 'Biology', 'Astronomy', 'Earth Science',
-      'Computer Engineering', 'Artificial Intelligence',
-      'Public Health', 'Neurology', 'Pharmacology',
-      'Agriculture', 'Environmental Science', 'Climate Science',
-      'Economics', 'Psychology', 'Sociology', 'Education',
-      'Philosophy', 'History', 'Linguistics', 'Visual Arts',
-      'Data Science', 'Neuroscience', 'Quantum Computing', 'Cybersecurity', 'AI Safety'
-    ];
+    const { filterType = 'all', filterValue = 'Semua' } = req.body || {};
     
-    // Pick 5 random topics for generation to keep it diverse
-    const shuffledTopics = ALL_DOMAINS.sort(() => 0.5 - Math.random());
-    const selectedTopics = shuffledTopics.slice(0, 5);
+    // Resolve filter ke topik konkret menggunakan hierarki 3 level
+    const { disciplines, subtopicMap } = resolveFilterToTopics(filterType, filterValue);
+    
+    console.log(`[FeedRefresh] Filter: ${filterType}/${filterValue} → Disciplines: [${disciplines.join(', ')}]`);
+    if (subtopicMap && Object.keys(subtopicMap).length > 0) {
+      for (const [disc, subs] of Object.entries(subtopicMap)) {
+        console.log(`[FeedRefresh]   ${disc} → subtopics: [${subs.join(', ')}]`);
+      }
+    }
 
     const pipelineJob = await createPipelineJob({
       type: 'full_pipeline',
-      input: { topics: selectedTopics, count: 5 },
+      input: { topics: disciplines, count: 5, subtopicMap },
     });
 
     await prisma.pipelineJob.update({
@@ -243,9 +241,10 @@ router.post('/refresh', async (req, res) => {
     });
 
     const result = await executePipeline({
-      topics: selectedTopics,
+      topics: disciplines,
       count: 5,
       pipelineJobId: pipelineJob.id,
+      subtopicMap,
     });
 
     // Invalidate cache for the user since new content has been generated

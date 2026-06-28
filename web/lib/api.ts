@@ -47,8 +47,8 @@ export const feedAPI = {
     return response.data;
   },
 
-  refreshFeed: async () => {
-    const response = await api.post('/feed/refresh');
+  refreshFeed: async (filterType?: string, filterValue?: string) => {
+    const response = await api.post('/feed/refresh', { filterType, filterValue });
     return response.data;
   },
 };

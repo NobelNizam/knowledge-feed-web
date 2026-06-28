@@ -43,7 +43,7 @@ async function updateProgress(pipelineJobId, step, progress, details = null) {
  * @returns {Promise<Object>} Pipeline result
  */
 async function executePipeline(jobData) {
-  const { topics, count = 5, pipelineJobId } = jobData;
+  const { topics, count = 5, pipelineJobId, subtopicMap = null } = jobData;
   const pipelineTopics = topics && topics.length > 0 ? topics : getDefaultTopics();
 
   console.log(`[Pipeline] Starting pipeline for topics: ${pipelineTopics.join(', ')} (count: ${count})`);
@@ -73,7 +73,7 @@ async function executePipeline(jobData) {
       console.log('[Pipeline] No papers found, falling back to direct generation');
       // Fallback: generate tanpa RAG context
       await updateProgress(pipelineJobId, 'generate_fallback', 50);
-      const cards = await generateWithRAG({ count, domains: pipelineTopics });
+      const cards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
       
       for (const cardData of cards) {
         const modResult = moderateCard(cardData);
@@ -101,7 +101,7 @@ async function executePipeline(jobData) {
     if (cleanedPapers.length === 0) {
       console.log('[Pipeline] All papers are duplicates, falling back to direct generation');
       await updateProgress(pipelineJobId, 'generate_fallback', 50);
-      const cards = await generateWithRAG({ count, domains: pipelineTopics });
+      const cards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
       
       for (const cardData of cards) {
         const modResult = moderateCard(cardData);
@@ -197,6 +197,7 @@ async function executePipeline(jobData) {
     const generatedCards = await generateWithRAG({
       count,
       domains: pipelineTopics,
+      subtopicMap,
       context: retrieval.context,
       citations: buildCitations(retrieval.sourceChunks),
     });

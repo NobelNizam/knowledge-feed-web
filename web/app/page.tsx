@@ -260,7 +260,7 @@ export default function Home() {
     const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
     
     try {
-      const res = await feedAPI.refreshFeed();
+      const res = await feedAPI.refreshFeed(activeFilter.type, activeFilter.value);
       if (res.success && res.data && res.data.length > 0) {
         const newCards = res.data;
         const newIds = newCards.map((c: any) => c.id);

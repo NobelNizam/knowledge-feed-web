@@ -49,12 +49,13 @@ async function runWithModel(primaryCall, fallbackCall, logLabel = 'LLM') {
  * Generate knowledge cards dengan RAG context
  * @param {Object} options
  * @param {number} [options.count=5] - Number of cards to generate
- * @param {string[]} [options.domains] - Domain filter
+ * @param {string[]} [options.domains] - Domain filter (Level 2 discipline names)
+ * @param {Object} [options.subtopicMap] - Level 3 subtopics per discipline, e.g. { "Physics": ["Optik", "Relativitas"] }
  * @param {string} [options.context] - RAG context dari retriever
  * @param {Array<Object>} [options.citations] - Citations dari retriever
  * @returns {Promise<Array<Object>>} Generated card data (not yet saved to DB)
  */
-async function generateWithRAG({ count = 5, domains = null, context = '', citations = [] } = {}) {
+async function generateWithRAG({ count = 5, domains = null, subtopicMap = null, context = '', citations = [] } = {}) {
   if (!process.env.NVIDIA_API_KEY) {
     throw new Error('NVIDIA_API_KEY is not configured in .env');
   }
@@ -63,6 +64,15 @@ async function generateWithRAG({ count = 5, domains = null, context = '', citati
     ? `PENTING: Pilih HANYA SATU disiplin ilmu (Level 2) dari daftar ini untuk setiap kartu: ${domains.join(', ')}. Jangan menggabungkan atau memodifikasi nama disiplin tersebut!`
     : `Pilih secara acak HANYA SATU disiplin ilmu (Level 2) akademis formal dalam Bahasa Inggris untuk setiap kartu (contoh: "Physics", "Artificial Intelligence", "Microbiology", "Astronomy", "Theoretical Computer Science", "Economics", "Psychology", "Linguistics", "Agriculture", "Philosophy", "History"). Pastikan nama disiplin ditulis dalam bahasa Inggris baku dengan huruf kapital di awal setiap kata.`;
 
+  // Build sub-topic prompt jika subtopicMap tersedia (dari hierarki Level 3)
+  let subtopicPrompt = '';
+  if (subtopicMap && Object.keys(subtopicMap).length > 0) {
+    const lines = Object.entries(subtopicMap).map(([discipline, subtopics]) => {
+      return `- Untuk disiplin "${discipline}", fokuskan konten pada sub-topik berikut: ${subtopics.join(', ')}.`;
+    });
+    subtopicPrompt = `\nSUB-TOPIK SPESIFIK (Level 3):\n${lines.join('\n')}\nINSTRUKSI: Buat konten yang spesifik membahas sub-topik di atas. Gunakan nama sub-topik sebagai salah satu nilai "tags" pada setiap kartu.\n`;
+  }
+
   const contextPrompt = context
     ? `\nKONTEKS REFERENSI (gunakan informasi ini sebagai sumber utama):\n${context}\n\nINSTRUKSI PENTING: Buat konten berdasarkan konteks referensi di atas. Setiap fakta HARUS berdasarkan informasi dari referensi yang disediakan. Sertakan kutipan sumber jika memungkinkan.`
     : '';
@@ -70,6 +80,7 @@ async function generateWithRAG({ count = 5, domains = null, context = '', citati
   const prompt = `
 Buatlah ${count} fakta menarik (knowledge cards) dalam bahasa Indonesia.
 ${domainPrompt}
+${subtopicPrompt}
 ${contextPrompt}
  
 Gaya bahasa:
@@ -84,7 +95,7 @@ Berikan HANYA array JSON murni (tanpa tag markdown \`\`\`json) dengan format obj
     "title": "Judul Menarik (Singkat)",
     "content": "Isi fakta yang seru dan mudah dipahami, maksimal 2-3 kalimat. Sertakan referensi jika berdasarkan sumber ilmiah.",
     "domain": "Nama disiplin ilmu Level 2 dalam Bahasa Inggris baku (misal: Physics, Artificial Intelligence, Linguistics)",
-    "tags": ["tag1", "tag2", "tag3"],
+    "tags": ["sub-topik Level 3 yang relevan", "tag2", "tag3"],
     "citations": ["Judul sumber yang dikutip (jika ada)"]
   }
 ]
