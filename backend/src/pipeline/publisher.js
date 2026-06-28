@@ -129,20 +129,24 @@ async function createPipelineJob(jobData) {
   return job;
 }
 
-const { invalidateAllFeedCache } = require('../services/cacheService');
+const { invalidateAllFeedCache, invalidateDomainCache } = require('../services/cacheService');
 
 /**
  * Invalidate feed cache
  * @param {string[]} [domains] - Optional domains to invalidate
  */
 async function invalidateFeedCache(domains = null) {
-  if (domains) {
+  if (domains && domains.length > 0) {
     console.log(`[Publisher] Cache invalidation requested for domains: ${domains.join(', ')}`);
+    for (const domain of domains) {
+      await invalidateDomainCache(domain);
+    }
+    // Selalu invalidate cache feed "Semua" karena kontennya terpengaruh
+    await invalidateDomainCache('__all__');
   } else {
     console.log('[Publisher] Global feed cache invalidation requested');
+    await invalidateAllFeedCache();
   }
-  
-  await invalidateAllFeedCache();
 }
 
 module.exports = {

@@ -12,15 +12,20 @@ export default function Home() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
 
-  // State untuk Feed
-  const [cards, setCards] = useState<any[]>([]);
-  const [seenIds, setSeenIds] = useState<string[]>([]);
+  // Interface untuk state feed per tab
+  interface TabFeedState {
+    cards: any[];
+    seenIds: string[];
+    offset: number;
+    hasMore: boolean;
+    scrollPosition: number;
+  }
+
+  // State untuk seluruh Feed per domain
+  const [feeds, setFeeds] = useState<Record<string, TabFeedState>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
-  const limit = 10;
   
   // State untuk Filter & UI
   const [activeDomain, setActiveDomain] = useState<string | null>(null);
@@ -31,6 +36,22 @@ export default function Home() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
 
+  // Selector helper untuk feed domain aktif
+  const currentDomainKey = activeDomain ?? '__all__';
+  const currentFeed = feeds[currentDomainKey] || {
+    cards: [],
+    seenIds: [],
+    offset: 0,
+    hasMore: true,
+    scrollPosition: 0
+  };
+  const cards = currentFeed.cards;
+  const seenIds = currentFeed.seenIds;
+  const offset = currentFeed.offset;
+  const hasMore = currentFeed.hasMore;
+
+  const limit = 10;
+  
   // Drag to scroll carousel
   const carouselRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -39,37 +60,68 @@ export default function Home() {
 
   // Pull to refresh touch handlers
   const touchStartRef = useRef(0);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Restore state from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedCards = sessionStorage.getItem('feed_cards');
-      const savedOffset = sessionStorage.getItem('feed_offset');
-      const savedDomain = sessionStorage.getItem('feed_domain');
-      const savedScroll = sessionStorage.getItem('feed_scroll');
-      const savedSeenIds = sessionStorage.getItem('feed_seenIds');
+      const savedStates = sessionStorage.getItem('feed_tab_states');
+      const savedDomain = sessionStorage.getItem('feed_active_domain');
       
-      if (savedCards) setCards(JSON.parse(savedCards));
-      if (savedSeenIds) setSeenIds(JSON.parse(savedSeenIds));
-      if (savedOffset) setOffset(Number(savedOffset));
-      if (savedDomain) setActiveDomain(savedDomain === '__all__' ? null : savedDomain);
+      let parsedStates: Record<string, TabFeedState> = {};
+      if (savedStates) {
+        parsedStates = JSON.parse(savedStates);
+        
+        // Pulihkan scroll position dari fallback key jika tersimpan
+        Object.keys(parsedStates).forEach(key => {
+          const scrollVal = sessionStorage.getItem(`scroll_pos_${key}`);
+          if (scrollVal) {
+            parsedStates[key].scrollPosition = Number(scrollVal);
+          }
+        });
+        
+        setFeeds(parsedStates);
+      }
       
-      if (savedScroll) {
-        setTimeout(() => window.scrollTo(0, Number(savedScroll)), 100);
+      if (savedDomain !== null && savedDomain !== undefined) {
+        const activeDomainKey = savedDomain === 'null' ? null : savedDomain;
+        setActiveDomain(activeDomainKey);
+        
+        const domainKeyStr = activeDomainKey ?? '__all__';
+        const activeState = parsedStates[domainKeyStr];
+        if (activeState && activeState.cards.length > 0) {
+          const scrollVal = sessionStorage.getItem(`scroll_pos_${domainKeyStr}`);
+          const scrollPos = scrollVal ? Number(scrollVal) : (activeState.scrollPosition || 0);
+          setTimeout(() => window.scrollTo(0, scrollPos), 100);
+        }
       }
     }
     setIsRestoring(false);
   }, []);
 
-  // Save scroll position constantly
+  // Save scroll position constantly to sessionStorage to minimize React re-renders
   useEffect(() => {
     const handleScroll = () => {
-      sessionStorage.setItem('feed_scroll', window.scrollY.toString());
+      const currentKey = activeDomain ?? '__all__';
+      sessionStorage.setItem(`scroll_pos_${currentKey}`, window.scrollY.toString());
+      
+      // Update juga di tab state secara pasif
+      setFeeds(prev => {
+        const target = prev[currentKey];
+        if (target) {
+          return {
+            ...prev,
+            [currentKey]: {
+              ...target,
+              scrollPosition: window.scrollY
+            }
+          };
+        }
+        return prev;
+      });
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [activeDomain]);
 
   // Check auth and onboarding
   useEffect(() => {
@@ -92,17 +144,17 @@ export default function Home() {
   // Load feed when activeDomain changes
   useEffect(() => {
     if (user && isInitialized && !isRestoring) {
-      const savedDomain = sessionStorage.getItem('feed_domain');
-      const savedCards = sessionStorage.getItem('feed_cards');
       const currentDomainKey = activeDomain ?? '__all__';
+      const targetFeed = feeds[currentDomainKey];
       
-      if (savedCards && savedDomain === currentDomainKey) {
+      if (targetFeed && targetFeed.cards.length > 0) {
         setLoading(false);
+        const scrollVal = sessionStorage.getItem(`scroll_pos_${currentDomainKey}`);
+        const scrollPos = scrollVal ? Number(scrollVal) : (targetFeed.scrollPosition || 0);
+        setTimeout(() => window.scrollTo(0, scrollPos), 50);
       } else {
         loadFeed(0, true, activeDomain);
       }
-      
-      sessionStorage.setItem('feed_domain', currentDomainKey);
     }
   }, [activeDomain, user, isInitialized, isRestoring]);
 
@@ -114,13 +166,15 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Failed to fetch domains");
-      // Fallback
+      // Fallback dinamis jika API gagal
       setAvailableDomains(['science', 'history', 'technology', 'philosophy', 'arts', 'nature']);
     }
   };
 
   const loadFeed = async (newOffset: number, reset = false, domain = activeDomain) => {
     if (!user) return;
+    const domainKey = domain ?? '__all__';
+    
     if (reset) {
       setLoading(true);
       setError(null);
@@ -130,12 +184,12 @@ export default function Home() {
 
     try {
       let res;
-      const querySeenIds = reset ? [] : seenIds;
+      const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
+      const querySeenIds = reset ? [] : targetFeed.seenIds;
 
       if (domain) {
         res = await feedAPI.getFeed(limit, newOffset, [domain], querySeenIds);
       } else {
-        // Filter "Semua": Ambil secara acak dari seluruh bidang di DB, abaikan filter preferensi agar benar-benar acak semua bidang
         res = await feedAPI.getFeed(limit, newOffset, undefined, querySeenIds);
       }
 
@@ -143,30 +197,39 @@ export default function Home() {
         const incomingCards = res.data || [];
         const incomingIds = incomingCards.map((c: any) => c.id);
 
-        if (reset) {
-          setCards(incomingCards);
-          setSeenIds(incomingIds);
-          sessionStorage.setItem('feed_cards', JSON.stringify(incomingCards));
-          sessionStorage.setItem('feed_seenIds', JSON.stringify(incomingIds));
-          sessionStorage.setItem('feed_offset', '0');
-        } else {
-          setCards((prev) => {
-            const existingIds = new Set(prev.map(c => c.id));
+        setFeeds((prev) => {
+          let updatedFeed: TabFeedState;
+          if (reset) {
+            updatedFeed = {
+              cards: incomingCards,
+              seenIds: incomingIds,
+              offset: 0,
+              hasMore: incomingCards.length === limit,
+              scrollPosition: 0
+            };
+          } else {
+            const existingIds = new Set(targetFeed.cards.map(c => c.id));
             const newCards = incomingCards.filter((c: any) => !existingIds.has(c.id));
-            const updated = [...prev, ...newCards];
-            sessionStorage.setItem('feed_cards', JSON.stringify(updated));
-            return updated;
-          });
-          setSeenIds((prev) => {
-            const updated = [...prev, ...incomingIds];
-            sessionStorage.setItem('feed_seenIds', JSON.stringify(updated));
-            return updated;
-          });
-          sessionStorage.setItem('feed_offset', newOffset.toString());
-        }
-        
-        setHasMore(incomingCards.length === limit);
-        setOffset(newOffset);
+            const updatedCards = [...targetFeed.cards, ...newCards];
+            const updatedSeenIds = [...targetFeed.seenIds, ...incomingIds];
+            
+            updatedFeed = {
+              cards: updatedCards,
+              seenIds: updatedSeenIds,
+              offset: newOffset,
+              hasMore: incomingCards.length === limit,
+              scrollPosition: targetFeed.scrollPosition
+            };
+          }
+          
+          const updated = {
+            ...prev,
+            [domainKey]: updatedFeed
+          };
+          
+          sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
+          return updated;
+        });
       } else {
         setError(res.error || "Failed to load feed");
       }
@@ -184,22 +247,40 @@ export default function Home() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     setError(null);
+    const domainKey = activeDomain ?? '__all__';
+    const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
+    
     try {
       const res = await feedAPI.refreshFeed();
       if (res.success && res.data && res.data.length > 0) {
         const newCards = res.data;
         const newIds = newCards.map((c: any) => c.id);
         
-        setCards(prev => {
-          const updated = [...newCards, ...prev];
-          sessionStorage.setItem('feed_cards', JSON.stringify(updated));
+        setFeeds(prev => {
+          const existingIds = new Set(targetFeed.cards.map(c => c.id));
+          const filteredNewCards = newCards.filter((c: any) => !existingIds.has(c.id));
+          const updatedCards = [...filteredNewCards, ...targetFeed.cards];
+          const updatedSeenIds = [...newIds, ...targetFeed.seenIds];
+          
+          const updatedFeed = {
+            ...targetFeed,
+            cards: updatedCards,
+            seenIds: updatedSeenIds,
+            scrollPosition: 0
+          };
+          
+          const updated = {
+            ...prev,
+            [domainKey]: updatedFeed
+          };
+          
+          sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
+          sessionStorage.setItem(`scroll_pos_${domainKey}`, '0');
           return updated;
         });
-        setSeenIds(prev => {
-          const updated = [...newIds, ...prev];
-          sessionStorage.setItem('feed_seenIds', JSON.stringify(updated));
-          return updated;
-        });
+        
+        // Scroll ke atas dengan halus agar user melihat konten baru
+        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
       }
     } catch (e: any) {
       console.error("Refresh failed:", e);
@@ -211,9 +292,31 @@ export default function Home() {
   };
 
   const handleDomainSelect = (domain: string | null) => {
-    if (domain === activeDomain) return; // Prevent double fetch
+    const prevDomainKey = activeDomain ?? '__all__';
+    const nextDomainKey = domain ?? '__all__';
+    
+    if (prevDomainKey === nextDomainKey) return;
+    
+    // 1. Simpan scroll position domain lama terlebih dahulu ke state dan sessionStorage
+    const currentScrollY = window.scrollY;
+    sessionStorage.setItem(`scroll_pos_${prevDomainKey}`, currentScrollY.toString());
+    
+    setFeeds(prev => {
+      const prevFeed = prev[prevDomainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
+      const updated = {
+        ...prev,
+        [prevDomainKey]: {
+          ...prevFeed,
+          scrollPosition: currentScrollY
+        }
+      };
+      sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Aktifkan tab baru
     setActiveDomain(domain);
-    loadFeed(0, true, domain);
+    sessionStorage.setItem('feed_active_domain', domain === null ? 'null' : domain);
   };
 
   // --- Touch & Scroll Handlers ---
@@ -284,25 +387,30 @@ export default function Home() {
       onTouchEnd={onTouchEnd}
     >
       {/* Top action bar - Desktop refresh & Domain Filter */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border shadow-sm">
+      <div className="sticky top-0 z-10 bg-background/70 backdrop-blur-md border-b border-border/55 shadow-sm">
         {/* Pull to refresh indicator */}
         <div 
-          className="w-full flex justify-center overflow-hidden transition-all duration-200 bg-muted"
+          className="w-full flex justify-center overflow-hidden transition-all duration-200 bg-muted/40"
           style={{ height: isRefreshing ? '40px' : `${pullProgress * 40}px` }}
         >
-          <div className="flex items-center text-primary text-sm font-medium mt-2">
+          <div className="flex items-center text-primary text-sm font-semibold mt-2">
             <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing ? "animate-spin" : "")} 
                        style={{ transform: `rotate(${pullProgress * 180}deg)` }}/>
             {isRefreshing ? 'Memperbarui...' : pullProgress > 0.6 ? 'Lepas untuk memperbarui' : 'Tarik ke bawah'}
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-3">
-          <div className="flex items-center">
-            <h1 className="text-xl font-bold md:hidden">For You</h1>
+        <div className="flex items-center justify-between p-3 relative max-w-2xl mx-auto w-full">
+          <div className="flex items-center w-full overflow-hidden relative">
+            <h1 className="text-xl font-bold md:hidden mr-3 shrink-0">For You</h1>
+            
+            {/* Gradient mask overlays for smooth scroll indicator */}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 hidden md:block" />
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 hidden md:block" />
+
             <div 
               ref={carouselRef}
-              className="hidden md:flex overflow-x-auto no-scrollbar gap-2 cursor-grab active:cursor-grabbing px-2 py-1"
+              className="hidden md:flex overflow-x-auto no-scrollbar gap-2 cursor-grab active:cursor-grabbing px-6 py-1 w-full scroll-smooth"
               onMouseDown={handleMouseDown}
               onMouseLeave={handleMouseLeave}
               onMouseUp={handleMouseUp}
@@ -311,10 +419,10 @@ export default function Home() {
               <button
                 onClick={() => handleDomainSelect(null)}
                 className={cn(
-                  "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
+                  "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-300",
                   activeDomain === null 
-                    ? "bg-foreground text-background border-foreground" 
-                    : "bg-background text-muted-foreground border-border hover:bg-muted"
+                    ? "bg-foreground text-background border-foreground shadow-sm scale-105" 
+                    : "bg-background/40 text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground"
                 )}
               >
                 Semua
@@ -324,10 +432,10 @@ export default function Home() {
                   key={domain}
                   onClick={() => handleDomainSelect(domain)}
                   className={cn(
-                    "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize",
+                    "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-300 capitalize",
                     activeDomain === domain 
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                      : "bg-background text-muted-foreground border-border hover:bg-muted"
+                      ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" 
+                      : "bg-background/40 text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground"
                   )}
                 >
                   {domain}
@@ -339,61 +447,67 @@ export default function Home() {
           <button 
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="hidden md:flex p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+            className="hidden md:flex p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
             title="Refresh Feed"
           >
             <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
           </button>
         </div>
 
-        {/* Mobile Domain Filter */}
-        <div 
-          className="md:hidden flex overflow-x-auto no-scrollbar gap-2 px-3 pb-3 pt-1 border-t border-border"
-        >
-          <button
-            onClick={() => handleDomainSelect(null)}
-            className={cn(
-              "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
-              activeDomain === null 
-                ? "bg-foreground text-background border-foreground" 
-                : "bg-background text-muted-foreground border-border"
-            )}
+        {/* Mobile Domain Filter with gradients */}
+        <div className="md:hidden relative border-t border-border/40">
+          <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
+          <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
+          
+          <div 
+            className="flex overflow-x-auto no-scrollbar gap-2 px-3 pb-3 pt-2 scroll-smooth"
           >
-            Semua
-          </button>
-          {availableDomains.map((domain) => (
             <button
-              key={domain}
-              onClick={() => handleDomainSelect(domain)}
+              onClick={() => handleDomainSelect(null)}
               className={cn(
-                "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize",
-                activeDomain === domain 
-                  ? "bg-primary text-primary-foreground border-primary" 
-                  : "bg-background text-muted-foreground border-border"
+                "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
+                activeDomain === null 
+                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                  : "bg-background/40 text-muted-foreground border-border"
               )}
             >
-              {domain}
+              Semua
             </button>
-          ))}
+            {availableDomains.map((domain) => (
+              <button
+                key={domain}
+                onClick={() => handleDomainSelect(domain)}
+                className={cn(
+                  "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 capitalize",
+                  activeDomain === domain 
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+                    : "bg-background/40 text-muted-foreground border-border"
+                )}
+              >
+                {domain}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Main Feed Content */}
       <div className="flex-1 w-full max-w-2xl mx-auto">
         {error && !loading && (
-          <div className="m-4 p-4 bg-destructive/10 text-destructive rounded-xl flex items-center border border-destructive/20">
+          <div className="m-4 p-4 bg-destructive/10 text-destructive rounded-xl flex items-center border border-destructive/20 animate-in fade-in">
             <AlertCircle className="w-5 h-5 mr-3 shrink-0" />
             <p className="text-sm font-medium">{error}</p>
           </div>
         )}
 
         {loading && cards.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <RefreshCw className="w-8 h-8 animate-spin mb-4" />
-            <p className="font-medium">Menyiapkan pengetahuan untuk Anda...</p>
+          <div className="flex flex-col w-full pb-8">
+            {Array(3).fill(0).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : cards.length === 0 && !error ? (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center animate-in fade-in">
             <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">
               <BookOpen className="w-10 h-10 text-muted-foreground" />
             </div>
@@ -442,6 +556,44 @@ export default function Home() {
         )}
       </div>
     </div>
+  );
+}
+
+// --- Skeleton Card Component ---
+function SkeletonCard() {
+  return (
+    <article className="flex w-full border-b border-border/40 bg-background px-4 py-5 sm:px-6 animate-pulse">
+      {/* Left column */}
+      <div className="flex flex-col items-center mr-4">
+        <div className="h-10 w-10 rounded-full bg-muted/65" />
+        <div className="mt-2 w-0.5 grow rounded-full bg-muted/30 min-h-[60px]" />
+      </div>
+      
+      {/* Right column */}
+      <div className="flex w-full flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center w-full">
+          <div className="h-4 w-20 bg-muted/60 rounded-full" />
+          <div className="h-3 w-12 bg-muted/40 rounded-full" />
+        </div>
+        
+        {/* Title */}
+        <div className="mt-3 h-5 w-3/4 bg-muted/75 rounded-md" />
+        
+        {/* Content Lines */}
+        <div className="mt-3 space-y-2">
+          <div className="h-4 w-full bg-muted/50 rounded-md" />
+          <div className="h-4 w-full bg-muted/50 rounded-md" />
+          <div className="h-4 w-5/6 bg-muted/50 rounded-md" />
+        </div>
+        
+        {/* Tags */}
+        <div className="mt-4 flex gap-2">
+          <div className="h-5 w-12 bg-muted/45 rounded-md" />
+          <div className="h-5 w-16 bg-muted/45 rounded-md" />
+        </div>
+      </div>
+    </article>
   );
 }
 

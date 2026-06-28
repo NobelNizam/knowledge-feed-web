@@ -6,11 +6,28 @@ const prisma = new PrismaClient();
 
 const { createPipelineJob } = require('../pipeline/publisher');
 const { addPipelineJob } = require('../queue/queueManager');
-const { getCachedFeed, cacheFeed, invalidateUserCache } = require('../services/cacheService');
+const { getDomainCache, setDomainCache, invalidateUserCache } = require('../services/cacheService');
 const { executePipeline } = require('../queue/workers/pipelineWorker');
 
 // Middleware helper untuk get userId jika ada auth, jika tidak null
 const getUserId = (req) => req.user ? req.user.id : null;
+
+// Helper untuk mengisi cache domain jika kosong/expired
+async function populateCacheIfNeeded(domainTarget, domainFilter) {
+  try {
+    const cards = await prisma.knowledgeCard.findMany({
+      where: domainFilter ? { domain: { in: domainFilter } } : undefined,
+      take: 100,
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    await setDomainCache(domainTarget, cards);
+    return cards;
+  } catch (err) {
+    console.error(`[FeedRoute] Failed to populate cache for domain ${domainTarget}:`, err);
+    return [];
+  }
+}
 
 // GET /api/feed - Get feed with pagination
 router.get('/', async (req, res) => {
@@ -18,86 +35,86 @@ router.get('/', async (req, res) => {
     const { limit = 20, offset = 0, domains, seenIds } = req.query;
     const userId = getUserId(req);
     
-    // Cek cache terlebih dahulu
-    const cachedData = await getCachedFeed(userId, req.query);
-    if (cachedData) {
-      return res.json(cachedData);
-    }
-
     const domainFilter = domains ? domains.split(',') : null;
+    const domainTarget = domainFilter && domainFilter.length > 0 ? domainFilter[0] : '__all__';
+
     let excludeIds = [];
     if (seenIds) {
-      excludeIds = seenIds.split(',');
+      excludeIds = seenIds.split(',').filter(id => id.trim() !== '');
     }
     
+    let cachedCards = await getDomainCache(domainTarget);
+    
+    // Jika cache kosong, trigger pengisian cache
+    if (!cachedCards || cachedCards.length === 0) {
+      cachedCards = await populateCacheIfNeeded(domainTarget, domainFilter);
+    }
+
     let cards = [];
+    let usedCache = false;
 
-    if (!domainFilter) {
-      // Filter "Semua": Ambil secara acak (ORDER BY RANDOM())
-      let rawCards = [];
-      if (excludeIds.length > 0) {
-        rawCards = await prisma.$queryRaw`
-          SELECT * FROM "knowledge_cards"
-          WHERE id NOT IN (${Prisma.join(excludeIds)})
-          ORDER BY RANDOM()
-          LIMIT ${parseInt(limit)}
-        `;
-      } else {
-        rawCards = await prisma.$queryRaw`
-          SELECT * FROM "knowledge_cards"
-          ORDER BY RANDOM()
-          LIMIT ${parseInt(limit)}
-        `;
+    if (cachedCards && cachedCards.length > 0) {
+      // Saring seenIds di memory level
+      const excludeSet = new Set(excludeIds);
+      const filtered = cachedCards.filter(card => !excludeSet.has(card.id));
+      
+      // Jika data tersisa cukup setelah disaring, ambil dari cache
+      if (filtered.length >= parseInt(limit)) {
+        cards = filtered.slice(0, parseInt(limit));
+        usedCache = true;
+      } else if (filtered.length > 0 && filtered.length < parseInt(limit)) {
+        // Ambil sisa yang ada, tapi campur dengan query DB jika hasMore
+        cards = filtered;
       }
+    }
 
-      cards = rawCards.map(row => ({
+    // Jika cache miss atau data tidak mencukupi, query ke database terurut waktu (ORDER BY createdAt desc)
+    if (!usedCache) {
+      const dbCards = await prisma.knowledgeCard.findMany({
+        where: {
+          domain: domainFilter ? { in: domainFilter } : undefined,
+          id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined
+        },
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Gabungkan data dari cache filter dengan database (jika ada irisan parsial)
+      const existingIds = new Set(cards.map(c => c.id));
+      const uniqueDbCards = dbCards.filter(c => !existingIds.has(c.id));
+      cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
+    }
+
+    const responseData = {
+      success: true,
+      data: cards.map(row => ({
         id: row.id,
         title: row.title,
         content: row.content,
         type: row.type,
         domain: row.domain,
         tags: row.tags,
-        sourceUrl: row.source_url,
-        sourceName: row.source_name,
-        aiModel: row.ai_model,
-        generatedAt: row.generated_at,
-        viewCount: row.view_count,
-        saveCount: row.save_count,
-        engagementScore: row.engagement_score,
-        factChecked: row.fact_checked,
-        factCheckScore: row.fact_check_score,
-        moderationStatus: row.moderation_status,
-        sourceChunkIds: row.source_chunk_ids,
+        sourceUrl: row.sourceUrl || row.source_url,
+        sourceName: row.sourceName || row.source_name,
+        aiModel: row.aiModel || row.ai_model,
+        generatedAt: row.generatedAt || row.generated_at,
+        viewCount: row.viewCount || row.view_count,
+        saveCount: row.saveCount || row.save_count,
+        engagementScore: row.engagementScore || row.engagement_score,
+        factChecked: row.factChecked || row.fact_checked,
+        factCheckScore: row.factCheckScore || row.fact_check_score,
+        moderationStatus: row.moderationStatus || row.moderation_status,
+        sourceChunkIds: row.sourceChunkIds || row.source_chunk_ids,
         citations: row.citations,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      }));
-    } else {
-      // Jika ada filter domain, ambil terurut waktu
-      // Hindari double offset bug: jika excludeIds aktif, skip diatur ke 0
-      cards = await prisma.knowledgeCard.findMany({
-        where: {
-          domain: { in: domainFilter },
-          id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined
-        },
-        take: parseInt(limit),
-        skip: excludeIds.length > 0 ? 0 : parseInt(offset),
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-
-    const responseData = {
-      success: true,
-      data: cards,
+        createdAt: row.createdAt || row.created_at,
+        updatedAt: row.updatedAt || row.updated_at
+      })),
       pagination: {
         limit: parseInt(limit),
         offset: parseInt(offset),
         hasMore: cards.length === parseInt(limit) || cards.length > 0,
       },
     };
-
-    // Simpan ke cache
-    await cacheFeed(userId, req.query, responseData);
 
     res.json(responseData);
   } catch (error) {
@@ -117,36 +134,74 @@ router.post('/personalized', async (req, res) => {
       return res.status(400).json({ error: 'Domains required' });
     }
 
-    // Cek cache
-    const queryParams = { ...req.query, domains };
-    const cachedData = await getCachedFeed(userId, queryParams);
-    if (cachedData) {
-      return res.json(cachedData);
+    const domainTarget = domains[0];
+    let excludeIds = seenIds || [];
+
+    let cachedCards = await getDomainCache(domainTarget);
+    if (!cachedCards || cachedCards.length === 0) {
+      cachedCards = await populateCacheIfNeeded(domainTarget, domains);
     }
 
-    // Hindari double offset bug: jika seenIds aktif, skip diatur ke 0
-    let cards = await prisma.knowledgeCard.findMany({
-      where: {
-        domain: { in: domains },
-        id: seenIds && seenIds.length > 0 ? { notIn: seenIds } : undefined
-      },
-      take: parseInt(limit),
-      skip: seenIds && seenIds.length > 0 ? 0 : parseInt(offset),
-      orderBy: { createdAt: 'desc' },
-    });
+    let cards = [];
+    let usedCache = false;
+
+    if (cachedCards && cachedCards.length > 0) {
+      const excludeSet = new Set(excludeIds);
+      const filtered = cachedCards.filter(card => !excludeSet.has(card.id));
+      
+      if (filtered.length >= parseInt(limit)) {
+        cards = filtered.slice(0, parseInt(limit));
+        usedCache = true;
+      } else if (filtered.length > 0) {
+        cards = filtered;
+      }
+    }
+
+    if (!usedCache) {
+      const dbCards = await prisma.knowledgeCard.findMany({
+        where: {
+          domain: { in: domains },
+          id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined
+        },
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const existingIds = new Set(cards.map(c => c.id));
+      const uniqueDbCards = dbCards.filter(c => !existingIds.has(c.id));
+      cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
+    }
 
     const responseData = {
       success: true,
-      data: cards,
+      data: cards.map(row => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        type: row.type,
+        domain: row.domain,
+        tags: row.tags,
+        sourceUrl: row.sourceUrl || row.source_url,
+        sourceName: row.sourceName || row.source_name,
+        aiModel: row.aiModel || row.ai_model,
+        generatedAt: row.generatedAt || row.generated_at,
+        viewCount: row.viewCount || row.view_count,
+        saveCount: row.saveCount || row.save_count,
+        engagementScore: row.engagementScore || row.engagement_score,
+        factChecked: row.factChecked || row.fact_checked,
+        factCheckScore: row.factCheckScore || row.fact_check_score,
+        moderationStatus: row.moderationStatus || row.moderation_status,
+        sourceChunkIds: row.sourceChunkIds || row.source_chunk_ids,
+        citations: row.citations,
+        createdAt: row.createdAt || row.created_at,
+        updatedAt: row.updatedAt || row.updated_at
+      })),
       pagination: {
         limit: parseInt(limit),
         offset: parseInt(offset),
         hasMore: cards.length === parseInt(limit) || cards.length > 0,
       },
     };
-
-    // Simpan ke cache
-    await cacheFeed(userId, queryParams, responseData);
 
     res.json(responseData);
   } catch (error) {
