@@ -1,44 +1,25 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFilter } from '@/lib/FilterContext';
-import { knowledgeAPI } from '@/lib/api';
-import { buildDomainTree, DOMAIN_LEVEL1_LIST } from '@/lib/domainMapping';
+import { DOMAIN_LEVEL1_LIST, DOMAIN_LEVEL2_MAP } from '@/lib/domainMapping';
 import { ChevronDown, ChevronRight, X, BookOpen, Layers, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function RightFilterPanel() {
   const { activeFilter, isFilterOpen, setFilter, setFilterOpen } = useFilter();
-  const [dbDomains, setDbDomains] = useState<string[]>([]);
-  const [domainTree, setDomainTree] = useState<Record<string, string[]>>({});
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
 
-  // Fetch domain list from backend database
+  // Secara otomatis ekspansi rumpun induk Level 1 jika ada disiplin Level 2 yang aktif saat mount/perubahan filter
   useEffect(() => {
-    const fetchDomains = async () => {
-      try {
-        const res = await knowledgeAPI.getDomains();
-        if (res.success && res.data) {
-          setDbDomains(res.data);
-          const tree = buildDomainTree(res.data);
-          setDomainTree(tree);
-          
-          // Secara default, perluas domain Level 1 yang aktif jika ada
-          if (activeFilter.type === 'level2') {
-            // Temukan induk Level 1 dari Level 2 aktif
-            const parent = Object.keys(tree).find(key => 
-              tree[key].some(sub => sub.toLowerCase() === activeFilter.value.toLowerCase())
-            );
-            if (parent) {
-              setExpandedDomains(prev => ({ ...prev, [parent]: true }));
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load domains in RightFilterPanel", err);
+    if (activeFilter.type === 'level2') {
+      const parent = Object.keys(DOMAIN_LEVEL2_MAP).find(key => 
+        DOMAIN_LEVEL2_MAP[key].some(sub => sub.name.toLowerCase() === activeFilter.value.toLowerCase())
+      );
+      if (parent) {
+        setExpandedDomains(prev => ({ ...prev, [parent]: true }));
       }
-    };
-    fetchDomains();
+    }
   }, [activeFilter]);
 
   const toggleExpand = (domainName: string, e: React.MouseEvent) => {
@@ -50,8 +31,8 @@ export default function RightFilterPanel() {
   };
 
   const handleLevel1Click = (domainName: string) => {
-    // Ambil seluruh disiplin Level 2 di bawah Level 1 ini yang ada di DB
-    const subDomains = domainTree[domainName] || [];
+    // Ambil seluruh nama disiplin Level 2 di bawah Level 1 ini secara statis
+    const subDomains = DOMAIN_LEVEL2_MAP[domainName]?.map(d => d.name) || [];
     setFilter('level1', domainName, subDomains);
   };
 
@@ -77,7 +58,7 @@ export default function RightFilterPanel() {
       <aside
         className={cn(
           // Posisi & layout default (desktop)
-          "sticky top-[108px] right-0 z-20 flex h-[calc(100vh-140px)] w-[280px] shrink-0 flex-col border border-border/60 bg-card/60 backdrop-blur-md rounded-2xl p-5 overflow-y-auto transition-all duration-300 shadow-sm hidden md:flex",
+          "sticky top-[108px] right-0 z-20 flex h-[calc(100vh-140px)] w-[290px] shrink-0 flex-col border border-border/60 bg-card/60 backdrop-blur-md rounded-2xl p-5 overflow-y-auto transition-all duration-300 shadow-sm hidden md:flex",
           // Posisi & layout ketika mobile (slide-over drawer dari kanan)
           "max-md:fixed max-md:top-0 max-md:right-0 max-md:h-screen max-md:w-[300px] max-md:z-40 max-md:bg-background max-md:border-l max-md:border-border max-md:rounded-none max-md:p-6 max-md:shadow-2xl",
           // Buka-tutup panel di mobile & desktop
@@ -115,7 +96,7 @@ export default function RightFilterPanel() {
           >
             <span className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
-              Semua Bidang
+              All Domains
             </span>
             {activeFilter.type === 'all' && <Check className="h-4 w-4" />}
           </button>
@@ -125,10 +106,7 @@ export default function RightFilterPanel() {
           {/* List Domain Utama (Level 1) */}
           <div className="flex flex-col gap-1.5">
             {DOMAIN_LEVEL1_LIST.map((level1) => {
-              const subDomains = domainTree[level1.name] || [];
-              // Domain Level 1 ini hanya ditampilkan jika memiliki Level 2 aktif di DB
-              if (subDomains.length === 0) return null;
-
+              const subDisciplines = DOMAIN_LEVEL2_MAP[level1.name] || [];
               const isExpanded = !!expandedDomains[level1.name];
               const isSelected = activeFilter.type === 'level1' && activeFilter.value === level1.name;
 
@@ -155,14 +133,14 @@ export default function RightFilterPanel() {
                   </div>
 
                   {/* Disiplin Level 2 Sub-list */}
-                  {isExpanded && subDomains.length > 0 && (
+                  {isExpanded && subDisciplines.length > 0 && (
                     <div className="flex flex-col pl-6 mt-1 border-l border-border/40 ml-4 gap-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                      {subDomains.map((level2) => {
-                        const isSubSelected = activeFilter.type === 'level2' && activeFilter.value.toLowerCase() === level2.toLowerCase();
+                      {subDisciplines.map((level2) => {
+                        const isSubSelected = activeFilter.type === 'level2' && activeFilter.value.toLowerCase() === level2.name.toLowerCase();
                         return (
                           <button
-                            key={level2}
-                            onClick={() => handleLevel2Click(level2)}
+                            key={level2.name}
+                            onClick={() => handleLevel2Click(level2.name)}
                             className={cn(
                               "text-left px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all",
                               isSubSelected
@@ -170,7 +148,7 @@ export default function RightFilterPanel() {
                                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                             )}
                           >
-                            {level2}
+                            {level2.name}
                           </button>
                         );
                       })}

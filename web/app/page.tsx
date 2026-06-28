@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { feedAPI, userAPI, knowledgeAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useFilter } from '@/lib/FilterContext';
-import { DOMAIN_LEVEL1_LIST } from '@/lib/domainMapping';
+import { DOMAIN_LEVEL1_LIST, getDisciplineDescription } from '@/lib/domainMapping';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { RefreshCw, CheckCircle2, ChevronRight, BookOpen, AlertCircle, Filter, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -386,6 +386,23 @@ export default function Home() {
               <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                 {DOMAIN_LEVEL1_LIST.find(d => d.name === activeFilter.value)?.description || 
                  "Cabang rumpun ilmu pengetahuan terintegrasi."}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Level 2 Discipline Info Card */}
+        {activeFilter.type === 'level2' && (
+          <div className="m-4 p-5 bg-card/45 border border-border/80 rounded-2xl animate-in slide-in-from-top duration-300 shadow-sm relative overflow-hidden flex gap-4">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-bl-full pointer-events-none" />
+            <div className="p-3 h-fit rounded-xl bg-primary/10 text-primary shrink-0">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-primary tracking-wider uppercase">Disiplin Ilmu</span>
+              <h2 className="text-lg font-bold text-foreground mt-0.5">{activeFilter.value}</h2>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                {getDisciplineDescription(activeFilter.value)}
               </p>
             </div>
           </div>
