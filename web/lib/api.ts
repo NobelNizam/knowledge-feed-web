@@ -30,17 +30,25 @@ export const authAPI = {
 };
 
 export const feedAPI = {
-  getFeed: async (limit = 20, offset = 0, domains?: string[]) => {
+  getFeed: async (limit = 20, offset = 0, domains?: string[], seenIds?: string[]) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (domains && domains.length > 0) {
       params.append('domains', domains.join(','));
+    }
+    if (seenIds && seenIds.length > 0) {
+      params.append('seenIds', seenIds.join(','));
     }
     const response = await api.get(`/feed?${params}`);
     return response.data;
   },
 
-  getPersonalizedFeed: async (domains: string[], limit = 20, offset = 0) => {
-    const response = await api.post('/feed/personalized', { domains }, { params: { limit, offset } });
+  getPersonalizedFeed: async (domains: string[], limit = 20, offset = 0, seenIds?: string[]) => {
+    const response = await api.post('/feed/personalized', { domains, seenIds }, { params: { limit, offset } });
+    return response.data;
+  },
+
+  refreshFeed: async () => {
+    const response = await api.post('/feed/refresh');
     return response.data;
   },
 };

@@ -1,97 +1,171 @@
+/**
+ * AI Generator — RAG-Aware Knowledge Card Generator
+ * 
+ * Menghasilkan knowledge cards menggunakan NVIDIA NIM LLM
+ * dengan context dari RAG retriever. Mendukung fallback model.
+ */
+
 const { OpenAI } = require('openai');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-// Konfigurasi menggunakan Nvidia NIM API
-// Nvidia NIM menggunakan endpoint yang kompatibel dengan OpenAI SDK
+// Primary NVIDIA NIM client
 const openai = new OpenAI({
   apiKey: process.env.NVIDIA_API_KEY,
   baseURL: process.env.NVIDIA_API_BASE_URL || 'https://integrate.api.nvidia.com/v1',
 });
 
-// Model default jika tidak ditentukan di .env
 const DEFAULT_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
 
-async function generateKnowledgeCards(count = 5, domains = null) {
+/**
+ * Run LLM call dengan fallback model support
+ * @param {Function} primaryCall - Primary model call function
+ * @param {Function} fallbackCall - Fallback model call function
+ * @param {string} [logLabel='LLM'] - Label for logging
+ * @returns {Promise<*>} Result dari primary atau fallback
+ */
+async function runWithModel(primaryCall, fallbackCall, logLabel = 'LLM') {
+  try {
+    return await primaryCall();
+  } catch (primaryError) {
+    console.error(`[${logLabel}] Primary model failed:`, primaryError.message);
+
+    if (fallbackCall) {
+      console.log(`[${logLabel}] Switching to fallback model...`);
+      try {
+        return await fallbackCall();
+      } catch (fallbackError) {
+        console.error(`[${logLabel}] Fallback model also failed:`, fallbackError.message);
+        throw fallbackError;
+      }
+    }
+
+    throw primaryError;
+  }
+}
+
+/**
+ * Generate knowledge cards dengan RAG context
+ * @param {Object} options
+ * @param {number} [options.count=5] - Number of cards to generate
+ * @param {string[]} [options.domains] - Domain filter
+ * @param {string} [options.context] - RAG context dari retriever
+ * @param {Array<Object>} [options.citations] - Citations dari retriever
+ * @returns {Promise<Array<Object>>} Generated card data (not yet saved to DB)
+ */
+async function generateWithRAG({ count = 5, domains = null, context = '', citations = [] } = {}) {
   if (!process.env.NVIDIA_API_KEY) {
     throw new Error('NVIDIA_API_KEY is not configured in .env');
   }
 
   const domainPrompt = domains && domains.length > 0
     ? `PENTING: Pilih HANYA SATU domain dari daftar ini untuk setiap kartu: ${domains.join(', ')}. Jangan menggabungkan dua domain!`
-    : `Pilih secara acak HANYA SATU domain dari daftar berikut untuk setiap kartu: sains, sejarah, teknologi, filosofi, seni, alam, psikologi, luar angkasa.`;
+    : `Pilih secara acak HANYA SATU domain dari daftar berikut untuk setiap kartu: sains, teknologi, sejarah, filosofi, seni, psikologi, kesehatan, luar angkasa, coding, matematika, ekonomi, hukum, lingkungan, sosiologi, geografi, astronomi, biologi, fisika, kimia, bahasa, musik, olahraga, kuliner, pertanian.`;
+
+  const contextPrompt = context
+    ? `\nKONTEKS REFERENSI (gunakan informasi ini sebagai sumber utama):\n${context}\n\nINSTRUKSI PENTING: Buat konten berdasarkan konteks referensi di atas. Setiap fakta HARUS berdasarkan informasi dari referensi yang disediakan. Sertakan kutipan sumber jika memungkinkan.`
+    : '';
 
   const prompt = `
 Buatlah ${count} fakta menarik (knowledge cards) dalam bahasa Indonesia.
 ${domainPrompt}
+${contextPrompt}
 
 Gaya bahasa:
 - Santai, seru, dan mudah dicerna (casual, cocok untuk dibaca di sela-sela waktu luang).
 - Hindari bahasa yang terlalu baku atau kaku, gunakan bahasa sehari-hari yang sopan dan asyik.
+- Jika ada kutipan sumber, sebutkan secara natural di dalam konten.
 
 Format Output:
 Berikan HANYA array JSON murni (tanpa tag markdown \`\`\`json) dengan format objek berikut:
 [
   {
     "title": "Judul Menarik (Singkat)",
-    "content": "Isi fakta yang seru dan mudah dipahami, maksimal 2-3 kalimat.",
+    "content": "Isi fakta yang seru dan mudah dipahami, maksimal 2-3 kalimat. Sertakan referensi jika berdasarkan sumber ilmiah.",
     "domain": "hanya satu kata tunggal (misal: sains)",
-    "tags": ["tag1", "tag2", "tag3"]
+    "tags": ["tag1", "tag2", "tag3"],
+    "citations": ["Judul sumber yang dikutip (jika ada)"]
   }
 ]
 
 ATURAN SANGAT PENTING: 
-Pastikan Anda mematuhi struktur JSON yang valid! Jika Anda ingin menggunakan tanda kutip di dalam nilai string (seperti di dalam "content"), Anda WAJIB melakukan escape pada tanda kutip tersebut dengan backslash (contoh: \\"kata\\") ATAU gunakan saja tanda kutip tunggal ('kata'). Jika tidak, parsing JSON akan gagal!
+Pastikan Anda mematuhi struktur JSON yang valid! Jika Anda ingin menggunakan tanda kutip di dalam nilai string (seperti di dalam "content"), Anda WAJIB melakukan escape pada tanda kutip tersebut dengan backslash (contoh: \\\\"kata\\\\") ATAU gunakan saja tanda kutip tunggal ('kata'). Jika tidak, parsing JSON akan gagal!
 `;
 
-  try {
+  const makeCall = (model) => async () => {
     const completion = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
+      model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
-      max_tokens: 1024,
+      max_tokens: 2048,
     });
+    return completion.choices[0].message.content.trim();
+  };
 
-    const responseContent = completion.choices[0].message.content.trim();
-    let cardsData;
-    
-    try {
-      // Cari dan ekstrak string yang merupakan array JSON menggunakan Regex
-      const match = responseContent.match(/\[[\s\S]*\]/);
-      if (!match) {
-        throw new Error('No JSON array found in response');
-      }
-      cardsData = JSON.parse(match[0]);
-    } catch (e) {
-      console.error('Failed to parse Nvidia NIM response as JSON:', responseContent);
-      throw new Error('Invalid JSON format from AI');
+  const responseContent = await runWithModel(
+    makeCall(DEFAULT_MODEL),
+    null, // Fallback model bisa dikonfigurasi nanti
+    'AIGenerator'
+  );
+
+  // Parse response
+  let cardsData;
+  try {
+    const match = responseContent.match(/\[[\s\S]*\]/);
+    if (!match) {
+      throw new Error('No JSON array found in response');
     }
-
-    // Insert into database
-    const createdCards = await Promise.all(
-      cardsData.map((card) =>
-        prisma.knowledgeCard.create({
-          data: {
-            title: card.title,
-            content: card.content,
-            domain: card.domain,
-            tags: card.tags,
-            type: "QUICK_FACT",
-            aiModel: DEFAULT_MODEL,
-            sourceName: "AI Generated",
-          },
-        })
-      )
-    );
-
-    return createdCards;
-  } catch (error) {
-    console.error('Error generating AI knowledge cards via Nvidia NIM:', error);
-    throw error;
+    cardsData = JSON.parse(match[0]);
+  } catch (e) {
+    console.error('[AIGenerator] Failed to parse response as JSON:', responseContent);
+    throw new Error('Invalid JSON format from AI');
   }
+
+  // Map to card data format
+  return cardsData.map(card => ({
+    title: card.title,
+    content: card.content,
+    domain: card.domain,
+    tags: card.tags || [],
+    type: 'QUICK_FACT',
+    aiModel: DEFAULT_MODEL,
+    sourceName: context ? 'AI Generated (RAG)' : 'AI Generated',
+    cardCitations: card.citations || [],
+  }));
+}
+
+/**
+ * Legacy function: Generate dan langsung simpan ke DB (backward compatible)
+ * @param {number} count - Number of cards
+ * @param {string[]} domains - Domain filter
+ * @returns {Promise<Array<Object>>} Created KnowledgeCard records
+ */
+async function generateKnowledgeCards(count = 5, domains = null) {
+  const cardsData = await generateWithRAG({ count, domains });
+
+  // Insert into database (legacy behavior)
+  const createdCards = await Promise.all(
+    cardsData.map((card) =>
+      prisma.knowledgeCard.create({
+        data: {
+          title: card.title,
+          content: card.content,
+          domain: card.domain,
+          tags: card.tags,
+          type: card.type,
+          aiModel: card.aiModel,
+          sourceName: card.sourceName,
+        },
+      })
+    )
+  );
+
+  return createdCards;
 }
 
 module.exports = {
+  generateWithRAG,
   generateKnowledgeCards,
+  runWithModel,
 };

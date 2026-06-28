@@ -11,6 +11,7 @@ const feedRoutes = require('./routes/feed');
 const knowledgeRoutes = require('./routes/knowledge');
 const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
+const generateRoutes = require('./routes/generate');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -23,6 +24,13 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.method === 'POST') console.log('  Body:', req.body);
+  next();
+});
 
 // Global Rate Limiting
 const globalLimiter = rateLimit({
@@ -47,6 +55,7 @@ app.use('/api/feed', feedRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/generate', generateRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -54,8 +63,25 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Initialize BullMQ Pipeline Worker (only in non-test environments)
+let pipelineWorker = null;
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    const { createPipelineWorker } = require('./queue/workers/pipelineWorker');
+    pipelineWorker = createPipelineWorker();
+    console.log('Pipeline worker initialized');
+  } catch (error) {
+    console.warn('Pipeline worker not started (Redis may not be available):', error.message);
+  }
+}
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
+  if (pipelineWorker) {
+    await pipelineWorker.close();
+  }
+  const { closeAllQueues } = require('./queue/queueManager');
+  await closeAllQueues();
   await prisma.$disconnect();
   process.exit(0);
 });

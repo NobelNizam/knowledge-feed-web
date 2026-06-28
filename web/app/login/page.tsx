@@ -35,37 +35,37 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-sm p-8 border border-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="max-w-md w-full bg-card rounded-2xl shadow-sm p-8 border border-border">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-gray-500 mt-2">Sign in to your account</p>
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Welcome Back</h1>
+          <p className="text-muted-foreground mt-2">Sign in to Knowledge Feed</p>
         </div>
         
         {error && (
-          <div className="bg-red-50 text-red-500 p-3 rounded-lg mb-6 text-sm text-center">
+          <div className="bg-destructive/10 text-destructive p-3 rounded-lg mb-6 text-sm text-center font-medium border border-destructive/20">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <label className="block text-sm font-bold text-foreground mb-2">Email</label>
             <input
               type="email"
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSubmitting}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <label className="block text-sm font-bold text-foreground mb-2">Password</label>
             <input
               type="password"
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isSubmitting}
@@ -74,18 +74,18 @@ export default function Login() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`w-full py-3 text-white rounded-lg font-medium transition-colors ${
-              isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            className={`w-full py-3.5 text-primary-foreground rounded-xl font-bold transition-all mt-2 ${
+              isSubmitting ? 'bg-primary/50 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 hover:shadow-md'
             }`}
           >
-            {isSubmitting ? 'Signing In...' : 'Sign In'}
+            {isSubmitting ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        <p className="text-center mt-6 text-gray-600 text-sm">
+        <p className="text-center mt-8 text-muted-foreground text-sm font-medium">
           Don't have an account?{' '}
-          <Link href="/register" className="text-blue-600 font-medium hover:underline">
-            Sign up
+          <Link href="/register" className="text-primary hover:underline">
+            Create one
           </Link>
         </p>
       </div>

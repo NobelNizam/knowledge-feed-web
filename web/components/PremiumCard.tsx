@@ -20,21 +20,73 @@ interface PremiumCardProps {
 }
 
 const COLORS: Record<string, string> = {
+  // Existing domains
+  sains: 'bg-gradient-to-br from-blue-500 to-blue-600',
   science: 'bg-gradient-to-br from-blue-500 to-blue-600',
+  sejarah: 'bg-gradient-to-br from-amber-500 to-amber-700',
   history: 'bg-gradient-to-br from-amber-500 to-amber-700',
+  teknologi: 'bg-gradient-to-br from-indigo-500 to-indigo-700',
   technology: 'bg-gradient-to-br from-indigo-500 to-indigo-700',
+  filosofi: 'bg-gradient-to-br from-purple-500 to-purple-700',
   philosophy: 'bg-gradient-to-br from-purple-500 to-purple-700',
+  seni: 'bg-gradient-to-br from-pink-500 to-pink-700',
   arts: 'bg-gradient-to-br from-pink-500 to-pink-700',
+  psikologi: 'bg-gradient-to-br from-violet-500 to-violet-700',
+  kesehatan: 'bg-gradient-to-br from-rose-500 to-rose-700',
+  'luar angkasa': 'bg-gradient-to-br from-cyan-500 to-cyan-700',
+  coding: 'bg-gradient-to-br from-teal-500 to-teal-700',
   nature: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
+  // New domains
+  matematika: 'bg-gradient-to-br from-orange-500 to-orange-700',
+  ekonomi: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
+  hukum: 'bg-gradient-to-br from-slate-500 to-slate-700',
+  lingkungan: 'bg-gradient-to-br from-green-500 to-green-700',
+  sosiologi: 'bg-gradient-to-br from-fuchsia-500 to-fuchsia-700',
+  geografi: 'bg-gradient-to-br from-sky-500 to-sky-700',
+  astronomi: 'bg-gradient-to-br from-blue-700 to-blue-900',
+  biologi: 'bg-gradient-to-br from-lime-500 to-lime-700',
+  fisika: 'bg-gradient-to-br from-yellow-500 to-yellow-700',
+  kimia: 'bg-gradient-to-br from-red-500 to-red-700',
+  bahasa: 'bg-gradient-to-br from-stone-500 to-stone-700',
+  musik: 'bg-gradient-to-br from-pink-400 to-rose-600',
+  olahraga: 'bg-gradient-to-br from-green-600 to-green-800',
+  kuliner: 'bg-gradient-to-br from-orange-400 to-amber-600',
+  pertanian: 'bg-gradient-to-br from-yellow-700 to-amber-900',
 };
 
 const ICONS: Record<string, string> = {
+  // Existing domains
+  sains: '🔬',
   science: '🔬',
+  sejarah: '📜',
   history: '📜',
+  teknologi: '💻',
   technology: '💻',
+  filosofi: '🤔',
   philosophy: '🤔',
+  seni: '🎨',
   arts: '🎨',
+  psikologi: '🧠',
+  kesehatan: '🏥',
+  'luar angkasa': '🚀',
+  coding: '👨‍💻',
   nature: '🌿',
+  // New domains
+  matematika: '➗',
+  ekonomi: '📊',
+  hukum: '⚖️',
+  lingkungan: '🌍',
+  sosiologi: '👥',
+  geografi: '🗺️',
+  astronomi: '🔭',
+  biologi: '🧬',
+  fisika: '⚛️',
+  kimia: '🧪',
+  bahasa: '📖',
+  musik: '🎵',
+  olahraga: '⚽',
+  kuliner: '🍳',
+  pertanian: '🌾',
 };
 
 export default function PremiumCard({ card, isDetailView = false }: PremiumCardProps) {

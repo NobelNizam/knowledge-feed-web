@@ -1,59 +1,61 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Virtuoso } from 'react-virtuoso';
-import PremiumCard from '@/components/PremiumCard';
-import { feedAPI, knowledgeAPI, userAPI } from '@/lib/api';
+import { feedAPI, userAPI, knowledgeAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-}
+import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
+import { RefreshCw, CheckCircle2, ChevronRight, BookOpen, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function Home() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
-  
+
+  // State untuk Feed
   const [cards, setCards] = useState<any[]>([]);
+  const [seenIds, setSeenIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
-  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
-  const debouncedSelectedDomains = useDebounce(selectedDomains, 500);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const limit = 10;
+  
+  // State untuk Filter & UI
+  const [activeDomain, setActiveDomain] = useState<string | null>(null);
+  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullProgress, setPullProgress] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
 
-  // Referensi untuk carousel
+  // Drag to scroll carousel
   const carouselRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
-  const [initialScrollLeft, setInitialScrollLeft] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  // Pull to refresh touch handlers
+  const touchStartRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Restore state from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedCards = sessionStorage.getItem('feed_cards');
       const savedOffset = sessionStorage.getItem('feed_offset');
-      const savedDomains = sessionStorage.getItem('feed_domains');
+      const savedDomain = sessionStorage.getItem('feed_domain');
       const savedScroll = sessionStorage.getItem('feed_scroll');
+      const savedSeenIds = sessionStorage.getItem('feed_seenIds');
       
       if (savedCards) setCards(JSON.parse(savedCards));
+      if (savedSeenIds) setSeenIds(JSON.parse(savedSeenIds));
       if (savedOffset) setOffset(Number(savedOffset));
-      if (savedDomains) setSelectedDomains(JSON.parse(savedDomains));
+      if (savedDomain) setActiveDomain(savedDomain === '__all__' ? null : savedDomain);
       
       if (savedScroll) {
-        // Wait for DOM to render cards, then scroll
         setTimeout(() => window.scrollTo(0, Number(savedScroll)), 100);
       }
     }
@@ -69,63 +71,185 @@ export default function Home() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Check auth and onboarding
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
-    }
-  }, [user, authLoading, router]);
-
-  useEffect(() => {
-    if (user) {
-      knowledgeAPI.getDomains().then(res => {
-        if (res.data) setAvailableDomains(res.data.map((d: any) => d.domain));
+    } else if (user) {
+      if (!user.preferences?.domains || user.preferences.domains.length === 0) {
+        setShowOnboarding(true);
+        fetchAvailableDomains();
         setIsInitialized(true);
-      }).catch(err => console.error("Failed to load domains:", err));
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (user && isInitialized && !isRestoring) {
-      // If we restored cards and domains haven't changed, skip initial fetch
-      const savedDomains = sessionStorage.getItem('feed_domains');
-      const savedCards = sessionStorage.getItem('feed_cards');
-      
-      if (savedCards && savedDomains === JSON.stringify(debouncedSelectedDomains)) {
-        setLoading(false);
       } else {
-        loadFeed(debouncedSelectedDomains);
-      }
-      
-      // Save current selected domains
-      sessionStorage.setItem('feed_domains', JSON.stringify(debouncedSelectedDomains));
-      
-      // Simpan perubahan filter ke database di latar belakang
-      if (user.id) {
-        userAPI.updatePreferences(debouncedSelectedDomains).catch(err => {
-          console.error("Gagal menyimpan preferensi:", err);
+        setShowOnboarding(false);
+        fetchAvailableDomains().then(() => {
+          setIsInitialized(true);
         });
       }
     }
-  }, [debouncedSelectedDomains, user, isInitialized, isRestoring]);
+  }, [user, authLoading, router]);
 
+  // Load feed when activeDomain changes
   useEffect(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        carousel.scrollLeft += e.deltaY;
+    if (user && isInitialized && !isRestoring) {
+      const savedDomain = sessionStorage.getItem('feed_domain');
+      const savedCards = sessionStorage.getItem('feed_cards');
+      const currentDomainKey = activeDomain ?? '__all__';
+      
+      if (savedCards && savedDomain === currentDomainKey) {
+        setLoading(false);
+      } else {
+        loadFeed(0, true, activeDomain);
       }
-    };
-    carousel.addEventListener('wheel', handleWheel, { passive: false });
-    return () => carousel.removeEventListener('wheel', handleWheel);
-  }, []);
+      
+      sessionStorage.setItem('feed_domain', currentDomainKey);
+    }
+  }, [activeDomain, user, isInitialized, isRestoring]);
 
+  const fetchAvailableDomains = async () => {
+    try {
+      const res = await knowledgeAPI.getDomains();
+      if (res.success) {
+        setAvailableDomains(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch domains");
+      // Fallback
+      setAvailableDomains(['science', 'history', 'technology', 'philosophy', 'arts', 'nature']);
+    }
+  };
+
+  const loadFeed = async (newOffset: number, reset = false, domain = activeDomain) => {
+    if (!user) return;
+    if (reset) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      let res;
+      const querySeenIds = reset ? [] : seenIds;
+
+      if (domain) {
+        res = await feedAPI.getFeed(limit, newOffset, [domain], querySeenIds);
+      } else {
+        // Filter "Semua": Ambil secara acak dari seluruh bidang di DB, abaikan filter preferensi agar benar-benar acak semua bidang
+        res = await feedAPI.getFeed(limit, newOffset, undefined, querySeenIds);
+      }
+
+      if (res.success) {
+        const incomingCards = res.data || [];
+        const incomingIds = incomingCards.map((c: any) => c.id);
+
+        if (reset) {
+          setCards(incomingCards);
+          setSeenIds(incomingIds);
+          sessionStorage.setItem('feed_cards', JSON.stringify(incomingCards));
+          sessionStorage.setItem('feed_seenIds', JSON.stringify(incomingIds));
+          sessionStorage.setItem('feed_offset', '0');
+        } else {
+          setCards((prev) => {
+            const existingIds = new Set(prev.map(c => c.id));
+            const newCards = incomingCards.filter((c: any) => !existingIds.has(c.id));
+            const updated = [...prev, ...newCards];
+            sessionStorage.setItem('feed_cards', JSON.stringify(updated));
+            return updated;
+          });
+          setSeenIds((prev) => {
+            const updated = [...prev, ...incomingIds];
+            sessionStorage.setItem('feed_seenIds', JSON.stringify(updated));
+            return updated;
+          });
+          sessionStorage.setItem('feed_offset', newOffset.toString());
+        }
+        
+        setHasMore(incomingCards.length === limit);
+        setOffset(newOffset);
+      } else {
+        setError(res.error || "Failed to load feed");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "An unexpected error occurred");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+      setIsRefreshing(false);
+      setPullProgress(0);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      const res = await feedAPI.refreshFeed();
+      if (res.success && res.data && res.data.length > 0) {
+        const newCards = res.data;
+        const newIds = newCards.map((c: any) => c.id);
+        
+        setCards(prev => {
+          const updated = [...newCards, ...prev];
+          sessionStorage.setItem('feed_cards', JSON.stringify(updated));
+          return updated;
+        });
+        setSeenIds(prev => {
+          const updated = [...newIds, ...prev];
+          sessionStorage.setItem('feed_seenIds', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (e: any) {
+      console.error("Refresh failed:", e);
+      setError("Gagal memperbarui feed: " + (e.message || ""));
+    } finally {
+      setIsRefreshing(false);
+      setPullProgress(0);
+    }
+  };
+
+  const handleDomainSelect = (domain: string | null) => {
+    if (domain === activeDomain) return; // Prevent double fetch
+    setActiveDomain(domain);
+    loadFeed(0, true, domain);
+  };
+
+  // --- Touch & Scroll Handlers ---
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) {
+      touchStartRef.current = e.touches[0].clientY;
+    } else {
+      touchStartRef.current = 0;
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartRef.current > 0 && window.scrollY <= 0) {
+      const pull = e.touches[0].clientY - touchStartRef.current;
+      if (pull > 0 && pull < 150) {
+        setPullProgress(pull / 150); // 0 to 1
+        if (e.cancelable) e.preventDefault();
+      }
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (pullProgress > 0.6 && !isRefreshing && !loading) {
+      handleRefresh();
+    } else {
+      setPullProgress(0);
+    }
+    touchStartRef.current = 0;
+  };
+
+  // Carousel Drag Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!carouselRef.current) return;
     setIsDragging(true);
     setStartX(e.pageX - carouselRef.current.offsetLeft);
-    setInitialScrollLeft(carouselRef.current.scrollLeft);
+    setScrollLeft(carouselRef.current.scrollLeft);
   };
   const handleMouseLeave = () => setIsDragging(false);
   const handleMouseUp = () => setIsDragging(false);
@@ -134,216 +258,279 @@ export default function Home() {
     e.preventDefault();
     const x = e.pageX - carouselRef.current.offsetLeft;
     const walk = (x - startX) * 2;
-    carouselRef.current.scrollLeft = initialScrollLeft - walk;
+    carouselRef.current.scrollLeft = scrollLeft - walk;
   };
 
-  const extractAndAddDomains = (newCards: any[]) => {
-    setAvailableDomains(prev => {
-      const domains = new Set(prev);
-      newCards.forEach(card => {
-        if (card.domain) domains.add(card.domain);
-      });
-      return Array.from(domains);
-    });
-  };
+  if (authLoading) {
+    return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-muted-foreground w-8 h-8" /></div>;
+  }
 
-  const loadFeed = async (domainsToFetch: string[]) => {
-    try {
-      setLoading(true);
-      const data = domainsToFetch.length > 0
-        ? await feedAPI.getPersonalizedFeed(domainsToFetch, 20, 0)
-        : await feedAPI.getFeed(20, 0);
-      
-      const incomingCards = data.data || [];
-      setCards(incomingCards);
-      extractAndAddDomains(incomingCards);
-      setOffset(20);
-      
-      // Save to sessionStorage
-      sessionStorage.setItem('feed_cards', JSON.stringify(incomingCards));
-      sessionStorage.setItem('feed_offset', '20');
-    } catch (error) {
-      console.error('Failed to load feed:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMore = async () => {
-    if (loadingMore) return;
-    try {
-      setLoadingMore(true);
-      const data = debouncedSelectedDomains.length > 0
-        ? await feedAPI.getPersonalizedFeed(debouncedSelectedDomains, 20, offset)
-        : await feedAPI.getFeed(20, offset);
-      
-      const incomingCards = data.data || [];
-      if (incomingCards.length > 0) {
-        setCards(prev => {
-          const newCards = [...prev, ...incomingCards];
-          sessionStorage.setItem('feed_cards', JSON.stringify(newCards));
-          return newCards;
-        });
-        extractAndAddDomains(incomingCards);
-        setOffset(prev => {
-          const newOffset = prev + 20;
-          sessionStorage.setItem('feed_offset', newOffset.toString());
-          return newOffset;
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load more:', error);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const toggleDomain = (domain: string) => {
-    setSelectedDomains(prev =>
-      prev.includes(domain)
-        ? prev.filter(d => d !== domain)
-        : [...prev, domain]
-    );
-  };
-
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="text-4xl mb-3 animate-pulse">⏳</div>
-          <p className="text-gray-500 font-medium">Memverifikasi sesi...</p>
-        </div>
-      </div>
-    );
+  if (showOnboarding) {
+    return <OnboardingView 
+      availableDomains={availableDomains} 
+      onComplete={() => {
+        refreshUser();
+        setShowOnboarding(false);
+        loadFeed(0, true);
+      }} 
+    />;
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden" style={{ background: '#f8fafc' }}>
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob pointer-events-none"></div>
-      <div className="absolute top-[20%] right-[-10%] w-[50%] h-[50%] bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] left-[20%] w-[50%] h-[50%] bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000 pointer-events-none"></div>
-      
-      <header className="bg-white/70 backdrop-blur-xl shadow-sm sticky top-0 z-20 border-b border-white/20">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">📚 Knowledge Feed</h1>
-            <p className="text-sm text-gray-500">Transform scrolling into knowledge</p>
-          </div>
-          <div className="flex gap-4 items-center">
-            {user.role === 'ADMIN' && (
-              <Link href="/admin" className="text-indigo-600 font-extrabold text-sm hover:underline bg-indigo-50 px-3 py-1.5 rounded-lg shadow-sm border border-indigo-100">
-                ⚡ Admin Panel
-              </Link>
-            )}
-            <Link href="/profile" className="text-blue-600 font-bold hover:underline">
-              {user.name}
-            </Link>
-            <button onClick={logout} className="text-slate-400 hover:text-red-500 text-sm font-bold transition-colors">
-              Logout
-            </button>
+    <div 
+      className="flex flex-col flex-1 pb-20 md:pb-0"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Top action bar - Desktop refresh & Domain Filter */}
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border shadow-sm">
+        {/* Pull to refresh indicator */}
+        <div 
+          className="w-full flex justify-center overflow-hidden transition-all duration-200 bg-muted"
+          style={{ height: isRefreshing ? '40px' : `${pullProgress * 40}px` }}
+        >
+          <div className="flex items-center text-primary text-sm font-medium mt-2">
+            <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing ? "animate-spin" : "")} 
+                       style={{ transform: `rotate(${pullProgress * 180}deg)` }}/>
+            {isRefreshing ? 'Memperbarui...' : pullProgress > 0.6 ? 'Lepas untuk memperbarui' : 'Tarik ke bawah'}
           </div>
         </div>
-      </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 w-full">
-        {/* Filter Section with Carousel and Dropdown */}
-        <div className="mb-6 flex items-center gap-2 relative">
-          <div 
-            ref={carouselRef}
-            onMouseDown={handleMouseDown}
-            onMouseLeave={handleMouseLeave}
-            onMouseUp={handleMouseUp}
-            onMouseMove={handleMouseMove}
-            className="flex overflow-x-auto pb-2 touch-pan-x gap-2 flex-1 cursor-grab active:cursor-grabbing"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            <style jsx>{`
-              div::-webkit-scrollbar { display: none; }
-            `}</style>
-            {availableDomains.map(domain => (
+        <div className="flex items-center justify-between p-3">
+          <div className="flex items-center">
+            <h1 className="text-xl font-bold md:hidden">For You</h1>
+            <div 
+              ref={carouselRef}
+              className="hidden md:flex overflow-x-auto no-scrollbar gap-2 cursor-grab active:cursor-grabbing px-2 py-1"
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeave}
+              onMouseUp={handleMouseUp}
+              onMouseMove={handleMouseMove}
+            >
               <button
-                key={domain}
-                onClick={() => toggleDomain(domain)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                  selectedDomains.includes(domain)
-                    ? 'bg-blue-500 text-white shadow-sm'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
+                onClick={() => handleDomainSelect(null)}
+                className={cn(
+                  "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
+                  activeDomain === null 
+                    ? "bg-foreground text-background border-foreground" 
+                    : "bg-background text-muted-foreground border-border hover:bg-muted"
+                )}
               >
-                {domain}
+                Semua
               </button>
-            ))}
-          </div>
-
-          <button 
-            onClick={() => setShowDropdown(!showDropdown)}
-            className="shrink-0 p-2 bg-white border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 shadow-sm transition-colors z-10"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-          </button>
-
-          {showDropdown && (
-            <div className="absolute top-12 right-0 bg-white border border-gray-200 shadow-xl rounded-xl p-4 w-64 z-30 flex flex-wrap gap-2">
-              <div className="w-full text-xs font-bold text-gray-400 mb-1">SEMUA KATEGORI</div>
-              {availableDomains.map(domain => (
+              {availableDomains.map((domain) => (
                 <button
-                  key={`drop-${domain}`}
-                  onClick={() => toggleDomain(domain)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                    selectedDomains.includes(domain)
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  key={domain}
+                  onClick={() => handleDomainSelect(domain)}
+                  className={cn(
+                    "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize",
+                    activeDomain === domain 
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+                      : "bg-background text-muted-foreground border-border hover:bg-muted"
+                  )}
                 >
                   {domain}
                 </button>
               ))}
             </div>
+          </div>
+          
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="hidden md:flex p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+            title="Refresh Feed"
+          >
+            <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
+          </button>
+        </div>
+
+        {/* Mobile Domain Filter */}
+        <div 
+          className="md:hidden flex overflow-x-auto no-scrollbar gap-2 px-3 pb-3 pt-1 border-t border-border"
+        >
+          <button
+            onClick={() => handleDomainSelect(null)}
+            className={cn(
+              "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
+              activeDomain === null 
+                ? "bg-foreground text-background border-foreground" 
+                : "bg-background text-muted-foreground border-border"
+            )}
+          >
+            Semua
+          </button>
+          {availableDomains.map((domain) => (
+            <button
+              key={domain}
+              onClick={() => handleDomainSelect(domain)}
+              className={cn(
+                "whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize",
+                activeDomain === domain 
+                  ? "bg-primary text-primary-foreground border-primary" 
+                  : "bg-background text-muted-foreground border-border"
+              )}
+            >
+              {domain}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Feed Content */}
+      <div className="flex-1 w-full max-w-2xl mx-auto">
+        {error && !loading && (
+          <div className="m-4 p-4 bg-destructive/10 text-destructive rounded-xl flex items-center border border-destructive/20">
+            <AlertCircle className="w-5 h-5 mr-3 shrink-0" />
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        {loading && cards.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <RefreshCw className="w-8 h-8 animate-spin mb-4" />
+            <p className="font-medium">Menyiapkan pengetahuan untuk Anda...</p>
+          </div>
+        ) : cards.length === 0 && !error ? (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">
+              <BookOpen className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-bold text-foreground mb-2">Belum ada konten</h3>
+            <p className="text-muted-foreground max-w-md">
+              Mungkin AI pipeline sedang memproses data baru. Coba segarkan halaman beberapa saat lagi.
+            </p>
+            <button 
+              onClick={handleRefresh}
+              className="mt-6 px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all"
+            >
+              Segarkan Feed
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col w-full pb-8">
+            {cards.map((card, idx) => (
+              <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
+            ))}
+            
+            {hasMore && (
+              <div className="flex justify-center p-8">
+                <button
+                  onClick={() => loadFeed(offset + limit)}
+                  disabled={loadingMore}
+                  className="px-6 py-2.5 rounded-full border border-border bg-card text-foreground font-medium hover:bg-muted transition-colors flex items-center gap-2"
+                >
+                  {loadingMore ? (
+                    <><RefreshCw className="w-4 h-4 animate-spin" /> Memuat...</>
+                  ) : (
+                    'Tampilkan Lebih Banyak'
+                  )}
+                </button>
+              </div>
+            )}
+            
+            {!hasMore && cards.length > 0 && (
+              <div className="text-center py-12 pb-24 text-muted-foreground text-sm font-medium px-4">
+                <div className="bg-card border border-border rounded-2xl p-6 shadow-sm max-w-md mx-auto">
+                  <p className="font-bold text-foreground mb-1">🎉 Anda sudah melihat semua konten!</p>
+                  <p className="text-xs text-muted-foreground">Tarik ke atas (atau klik tombol refresh di atas) untuk konten baru yang disiapkan AI.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Onboarding Component ---
+function OnboardingView({ availableDomains, onComplete }: { availableDomains: string[], onComplete: () => void }) {
+  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const toggleDomain = (domain: string) => {
+    setSelectedDomains(prev => 
+      prev.includes(domain) 
+        ? prev.filter(d => d !== domain)
+        : [...prev, domain]
+    );
+  };
+
+  const handleSave = async () => {
+    if (selectedDomains.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      await userAPI.updatePreferences(selectedDomains, 'intermediate');
+      onComplete();
+    } catch (err) {
+      console.error("Failed to save preferences", err);
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 bg-background">
+      <div className="max-w-xl w-full bg-card p-8 rounded-3xl shadow-sm border border-border">
+        <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
+          <BookOpen className="w-8 h-8 text-primary" />
+        </div>
+        
+        <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
+          Pilih Minat Anda
+        </h1>
+        <p className="text-muted-foreground text-lg mb-8">
+          Pilih topik yang ingin Anda pelajari. AI kami akan menyusun feed khusus untuk Anda.
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
+          {availableDomains.length > 0 ? availableDomains.map(domain => {
+            const isSelected = selectedDomains.includes(domain);
+            return (
+              <button
+                key={domain}
+                onClick={() => toggleDomain(domain)}
+                className={cn(
+                  "p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden",
+                  isSelected 
+                    ? "border-primary bg-primary/5 text-primary" 
+                    : "border-border hover:border-primary/50 text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <span className="capitalize font-bold">{domain}</span>
+                {isSelected && (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary fill-primary/20" />
+                  </div>
+                )}
+              </button>
+            )
+          }) : (
+            // Fallback skeleton
+            Array(6).fill(0).map((_, i) => (
+              <div key={i} className="h-20 rounded-2xl bg-muted animate-pulse"></div>
+            ))
           )}
         </div>
 
-        <div className="w-full">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="text-4xl mb-3 animate-pulse">⏳</div>
-              <p className="text-gray-500">Loading knowledge...</p>
-            </div>
-          ) : cards.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-4xl mb-3">📭</div>
-              <p className="text-gray-500">No cards found</p>
-            </div>
-          ) : (
-            <Virtuoso
-              useWindowScroll
-              data={cards}
-              overscan={1000}
-              itemContent={(_index, card) => (
-                <div className="pb-4 relative z-10">
-                  <PremiumCard card={card} />
-                </div>
-              )}
-              components={{
-                Footer: () => (
-                  <div className="py-6 pb-12 flex justify-center items-center">
-                    {loadingMore ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-500"></div>
-                        <p className="text-gray-500 text-sm font-medium">Memanggil AI...</p>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={loadMore}
-                        className="w-full max-w-sm py-3 px-6 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 active:scale-95 transition-all shadow-sm hover:shadow-md"
-                      >
-                        Tampilkan Lebih Banyak
-                      </button>
-                    )}
-                  </div>
-                )
-              }}
-            />
-          )}
+        <div className="flex items-center justify-between pt-6 border-t border-border">
+          <p className="text-sm text-muted-foreground">
+            {selectedDomains.length} topik dipilih
+          </p>
+          <button
+            onClick={handleSave}
+            disabled={selectedDomains.length === 0 || isSubmitting}
+            className={cn(
+              "px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-all shadow-sm",
+              selectedDomains.length > 0
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
+            )}
+          >
+            {isSubmitting ? 'Menyimpan...' : 'Mulai Membaca'} 
+            {!isSubmitting && <ChevronRight className="w-5 h-5" />}
+          </button>
         </div>
       </div>
     </div>

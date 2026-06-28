@@ -1,4 +1,5 @@
-// Prisma Schema - Part 1
+// Prisma Schema - Knowledge Feed Platform
+// Includes RAG Pipeline models (PGVector managed via raw SQL)
 
 generator client {
   provider = "prisma-client-js"
@@ -28,10 +29,18 @@ model KnowledgeCard {
   saveCount       Int      @default(0) @map("save_count")
   engagementScore Float    @default(0) @map("engagement_score")
   
+  // RAG Pipeline fields
+  factChecked       Boolean  @default(false) @map("fact_checked")
+  factCheckScore    Float?   @map("fact_check_score")
+  moderationStatus  String   @default("pending") @map("moderation_status") // pending | approved | rejected
+  sourceChunkIds    String[] @map("source_chunk_ids")
+  citations         Json?    // Array of citation objects [{title, url, doi}]
+  
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   
   savedBy         User[]   @relation("SavedCards")
+  factCheckResults FactCheckResult[]
   
   @@map("knowledge_cards")
 }
@@ -87,4 +96,93 @@ model UserPreferences {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("user_preferences")
+}
+
+// --- RAG Pipeline Models ---
+
+model KnowledgeSource {
+  id            String   @id @default(cuid())
+  externalId    String   @unique @map("external_id") // arXiv ID, DOI, etc.
+  sourceType    String   @map("source_type") // arxiv, pubmed, crossref
+  title         String
+  authors       String[]
+  abstract      String?
+  url           String?
+  pdfUrl        String?  @map("pdf_url")
+  category      String?
+  publishedDate DateTime? @map("published_date")
+  contentHash   String?  @map("content_hash") // SHA-256 for deduplication
+  
+  rawContent    String?  @map("raw_content") // Original fetched content
+  cleanedContent String? @map("cleaned_content") // After cleaning
+  
+  status        String   @default("fetched") // fetched | cleaned | chunked | embedded
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  chunks        DocumentChunk[]
+  
+  @@map("knowledge_sources")
+}
+
+// Note: The `embedding` vector column is managed via raw SQL (Prisma doesn't support pgvector natively)
+// After migration, run: ALTER TABLE document_chunks ADD COLUMN embedding vector(1024);
+model DocumentChunk {
+  id            String   @id @default(cuid())
+  sourceId      String   @map("source_id")
+  chunkIndex    Int      @map("chunk_index")
+  content       String
+  startChar     Int      @map("start_char")
+  endChar       Int      @map("end_char")
+  tokenCount    Int?     @map("token_count")
+  
+  // embedding column managed via raw SQL (vector type)
+  embedded      Boolean  @default(false)
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  source        KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  
+  @@unique([sourceId, chunkIndex])
+  @@map("document_chunks")
+}
+
+model FactCheckResult {
+  id              String   @id @default(cuid())
+  cardId          String   @map("card_id")
+  claim           String   // The specific claim being checked
+  verified        Boolean  @default(false)
+  confidence      Float    @default(0) // 0.0 - 1.0
+  
+  sourceType      String   @map("source_type") // crossref, pubmed, arxiv
+  sourceUrl       String?  @map("source_url")
+  sourceTitle     String?  @map("source_title")
+  details         Json?    // Additional verification details
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  card            KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  @@map("fact_check_results")
+}
+
+model PipelineJob {
+  id            String   @id @default(cuid())
+  bullmqJobId   String?  @unique @map("bullmq_job_id")
+  type          String   // full_pipeline, crawl, embed, generate, fact_check, moderate
+  status        String   @default("queued") // queued | processing | completed | failed
+  
+  input         Json?    // Job input parameters
+  output        Json?    // Job result/output
+  error         String?  // Error message if failed
+  
+  currentStep   String?  @map("current_step") // Current pipeline step
+  progress      Int      @default(0) // 0-100
+  
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  
+  @@map("pipeline_jobs")
 }

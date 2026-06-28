@@ -56,7 +56,8 @@ router.get('/domains', async (req, res) => {
       _count: { id: true },
     });
 
-    res.json({ success: true, data: domains });
+    const domainNames = domains.map(d => d.domain);
+    res.json({ success: true, data: domainNames });
   } catch (error) {
     console.error('Domains error:', error);
     res.status(500).json({ error: 'Failed to fetch domains' });

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import AdminGuard from '@/components/AdminGuard';
 import { adminAPI } from '@/lib/adminAPI';
+import { RefreshCw, Users, Server, AlertTriangle, ShieldCheck, Inbox } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, onlineUsers: 0 });
@@ -10,6 +12,7 @@ export default function AdminDashboard() {
   const [deleteId, setDeleteId] = useState('');
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +44,7 @@ export default function AdminDashboard() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    setIsSubmitting(true);
     try {
       const res = await adminAPI.deleteFeedContent(deleteId);
       if (res.success) {
@@ -49,14 +53,16 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert("Failed to delete content");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (loading) {
     return (
       <AdminGuard>
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-          <p className="text-slate-500">Loading dashboard...</p>
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       </AdminGuard>
     );
@@ -64,86 +70,106 @@ export default function AdminDashboard() {
 
   return (
     <AdminGuard>
-      <div className="min-h-screen bg-slate-50 p-8 font-sans">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Dashboard</h1>
-              <p className="text-slate-500 mt-1 font-medium">Manage platform content and AI pipelines</p>
-            </div>
-            <a href="/" className="text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-colors">
-              &larr; Back to Feed
-            </a>
-          </div>
+      <div className="flex flex-col flex-1 w-full max-w-4xl mx-auto border-x border-border min-h-screen bg-background">
+        
+        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-4 flex items-center">
+          <ShieldCheck className="w-6 h-6 mr-2 text-primary" />
+          <h1 className="text-xl font-bold">Admin Dashboard</h1>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Total Users</p>
-              <h2 className="text-5xl font-black text-slate-800">{stats.totalUsers}</h2>
+        <div className="p-4 sm:p-6 space-y-6">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-card rounded-2xl p-4 border border-border shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Users</p>
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <h2 className="text-3xl font-black text-foreground">{stats.totalUsers}</h2>
             </div>
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Online Now</p>
-              <h2 className="text-5xl font-black text-emerald-500">{stats.onlineUsers}</h2>
+            
+            <div className="bg-card rounded-2xl p-4 border border-border shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Online Now</p>
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              </div>
+              <h2 className="text-3xl font-black text-emerald-500">{stats.onlineUsers}</h2>
             </div>
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm col-span-1 md:col-span-2 flex items-center justify-between">
+
+            <div className="bg-card rounded-2xl p-4 border border-border shadow-sm col-span-2 flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">AI Pipeline Status</p>
-                <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 rounded-full shadow-inner ${pipelineActive ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                  <span className="font-extrabold text-slate-700 text-lg">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">AI Pipeline Status</p>
+                <div className="flex items-center gap-2">
+                  <div className={cn("w-3 h-3 rounded-full shadow-inner", pipelineActive ? 'bg-emerald-500' : 'bg-destructive')}></div>
+                  <span className="font-bold text-foreground text-sm">
                     {pipelineActive ? 'Active & Generating' : 'Halted'}
                   </span>
                 </div>
               </div>
               <button 
                 onClick={togglePipeline}
-                className={`px-6 py-3 rounded-xl font-bold transition-all shadow-sm ${
+                className={cn(
+                  "px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-sm",
                   pipelineActive 
-                    ? 'bg-red-50 text-red-600 hover:bg-red-100 hover:shadow-md' 
-                    : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:shadow-md'
-                }`}
+                    ? 'bg-destructive/10 text-destructive hover:bg-destructive/20' 
+                    : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                )}
               >
                 {pipelineActive ? 'Stop Pipeline' : 'Start Pipeline'}
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
-              <h3 className="text-xl font-extrabold text-slate-800 mb-2">Content Moderation</h3>
-              <p className="text-slate-500 text-sm mb-6 font-medium">Force delete any inappropriate content by Post ID.</p>
-              <div className="flex gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Moderation */}
+            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+              <div className="flex items-center mb-4 text-destructive">
+                <AlertTriangle className="w-5 h-5 mr-2" />
+                <h3 className="text-lg font-bold">Content Moderation</h3>
+              </div>
+              <p className="text-muted-foreground text-sm mb-4 font-medium">
+                Force delete any inappropriate content by Post ID.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input 
                   type="text"
                   placeholder="Enter Post ID..."
                   value={deleteId}
                   onChange={(e) => setDeleteId(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="flex-1 bg-background border border-input rounded-xl px-4 py-2.5 text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm"
                 />
                 <button 
                   onClick={handleDelete}
-                  className="bg-red-500 hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 text-white px-6 py-3 rounded-xl font-bold transition-all"
+                  disabled={!deleteId || isSubmitting}
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-6 py-2.5 rounded-xl font-bold transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Delete
+                  {isSubmitting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col">
-              <h3 className="text-xl font-extrabold text-slate-800 mb-6">Inbox Reports</h3>
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-8 flex-1 flex flex-col items-center justify-center text-center">
+            {/* Reports */}
+            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm flex flex-col h-full min-h-[250px]">
+              <div className="flex items-center mb-4 text-foreground">
+                <Inbox className="w-5 h-5 mr-2 text-primary" />
+                <h3 className="text-lg font-bold">User Reports</h3>
+              </div>
+              <div className="bg-muted/50 rounded-xl border border-border p-6 flex-1 flex flex-col items-center justify-center text-center">
                 {reports.length === 0 ? (
                   <>
-                    <div className="text-5xl mb-4 opacity-80">📬</div>
-                    <p className="text-slate-500 font-bold">No pending user reports.</p>
-                    <p className="text-slate-400 text-sm mt-1">Your community is looking good!</p>
+                    <Inbox className="w-10 h-10 mb-3 text-muted-foreground opacity-50" />
+                    <p className="text-foreground font-bold">No pending reports.</p>
+                    <p className="text-muted-foreground text-sm mt-1">Your community is looking good!</p>
                   </>
                 ) : (
-                  <p>Load reports here...</p>
+                  <div className="w-full text-left">
+                    <p className="text-sm font-medium">Load reports here...</p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
+          
         </div>
       </div>
     </AdminGuard>

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import KnowledgeCard from '@/components/KnowledgeCard';
+import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { useAuth } from '@/lib/AuthContext';
+import { RefreshCw, Bookmark, User as UserIcon } from 'lucide-react';
+import Link from 'next/link';
 
 export default function Profile() {
   const { user, loading, logout } = useAuth();
@@ -19,65 +20,74 @@ export default function Profile() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Loading profile...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <RefreshCw className="animate-spin text-muted-foreground w-8 h-8" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
+    <div className="flex flex-col flex-1 w-full max-w-2xl mx-auto border-x border-border min-h-screen bg-background">
+      
+      {/* Profile Header section */}
+      <div className="p-6 border-b border-border">
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center text-4xl border border-border">
+            👤
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Your Profile</h1>
-            <Link href="/" className="text-sm text-blue-500 hover:underline">← Back to Feed</Link>
-          </div>
-          <button onClick={logout} className="text-gray-500 hover:text-red-500 text-sm font-medium">
-            Logout
-          </button>
-        </div>
-      </header>
-
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Account Information</h2>
-          <div className="space-y-4">
-            <div>
-              <span className="block text-sm font-medium text-gray-500">Name</span>
-              <span className="text-gray-900">{user.name}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-500">Email</span>
-              <span className="text-gray-900">{user.email}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-500">Reading Level</span>
-              <span className="text-gray-900 capitalize">{user.preferences?.readingLevel || 'Intermediate'}</span>
-            </div>
+            <h1 className="text-2xl font-bold text-foreground">{user.name}</h1>
+            <p className="text-muted-foreground">{user.email}</p>
           </div>
         </div>
 
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Saved Cards ({user.savedCards?.length || 0})
+        <div className="mt-6 pt-6 border-t border-border grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1">Topik Disukai</p>
+            <div className="flex flex-wrap gap-2">
+              {user.preferences?.domains?.map((domain: string) => (
+                <span key={domain} className="capitalize text-xs px-2 py-1 bg-primary/10 text-primary rounded-md font-medium">
+                  {domain}
+                </span>
+              )) || <span className="text-sm text-muted-foreground">Belum ada</span>}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1">Tingkat Bacaan</p>
+            <p className="capitalize font-bold text-foreground">
+              {user.preferences?.readingLevel || 'Menengah'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1">
+        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-3 px-4 flex justify-between items-center">
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <Bookmark className="w-4 h-4" /> Tersimpan ({user.savedCards?.length || 0})
           </h2>
-          {user.savedCards && user.savedCards.length > 0 ? (
-            <div className="space-y-4">
-              {user.savedCards.map((card: any) => (
-                <KnowledgeCard key={card.id} card={card} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="text-4xl mb-3">🔖</div>
-              <p className="text-gray-500">You haven't saved any cards yet.</p>
-              <Link href="/" className="text-blue-500 hover:underline mt-2 inline-block">
-                Explore the feed
-              </Link>
-            </div>
-          )}
         </div>
+
+        {user.savedCards && user.savedCards.length > 0 ? (
+          <div className="flex flex-col w-full pb-8">
+            {user.savedCards.map((card: any, idx: number) => (
+              <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 px-4">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <Bookmark className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-bold text-foreground mb-2">Belum ada konten tersimpan</h3>
+            <p className="text-muted-foreground mb-6">
+              Simpan postingan menarik dengan mengklik tombol bookmark pada feed.
+            </p>
+            <Link href="/" className="px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all">
+              Jelajahi Feed
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
