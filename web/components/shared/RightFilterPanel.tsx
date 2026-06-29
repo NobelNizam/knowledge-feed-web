@@ -49,7 +49,7 @@ export default function RightFilterPanel() {
       {/* Overlay hitam transparan untuk mobile ketika filter terbuka */}
       {isFilterOpen && (
         <div 
-          className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity sm:hidden"
+          className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity lg:hidden"
           onClick={() => setFilterOpen(false)}
         />
       )}
@@ -57,14 +57,16 @@ export default function RightFilterPanel() {
       {/* Panel Sidebar Kanan */}
       <aside
         className={cn(
-          // Posisi & layout default (desktop)
-          "sticky top-[108px] right-0 z-20 flex h-[calc(100vh-140px)] w-[290px] shrink-0 flex-col border border-border/60 bg-card/60 backdrop-blur-md rounded-2xl p-5 overflow-y-auto transition-all duration-300 shadow-sm hidden md:flex",
-          // Posisi & layout ketika mobile (slide-over drawer dari kanan)
-          "max-md:fixed max-md:top-0 max-md:right-0 max-md:h-screen max-md:w-[300px] max-md:z-40 max-md:bg-background max-md:border-l max-md:border-border max-md:rounded-none max-md:p-6 max-md:shadow-2xl",
-          // Buka-tutup panel di mobile & desktop
+          // Base styles (common for mobile & desktop)
+          "z-20 flex w-[290px] shrink-0 flex-col border border-border/60 bg-card/60 backdrop-blur-md rounded-2xl p-5 overflow-y-auto transition-all duration-300 shadow-sm",
+          // Desktop specific layout (sticky)
+          "lg:sticky lg:top-[108px] lg:h-[calc(100vh-140px)]",
+          // Mobile specific layout (fixed drawer)
+          "max-lg:fixed max-lg:top-0 max-lg:right-0 max-lg:h-screen max-lg:w-[300px] max-lg:z-40 max-lg:bg-background max-lg:border-l max-lg:border-border max-lg:rounded-none max-lg:p-6 max-lg:shadow-2xl",
+          // Open/Close state management
           isFilterOpen 
-            ? "max-md:translate-x-0 md:flex md:opacity-100" 
-            : "max-md:translate-x-full md:hidden md:opacity-0"
+            ? "translate-x-0 opacity-100 lg:flex" 
+            : "max-lg:translate-x-full lg:hidden max-lg:opacity-0"
         )}
       >
         {/* Header Panel */}
@@ -75,7 +77,7 @@ export default function RightFilterPanel() {
           </div>
           <button
             onClick={() => setFilterOpen(false)}
-            className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors md:hidden"
+            className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors lg:hidden"
             title="Tutup Filter"
           >
             <X className="h-5 w-5" />

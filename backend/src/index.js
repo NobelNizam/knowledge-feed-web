@@ -19,7 +19,23 @@ const prisma = new PrismaClient();
 // Security Middlewares
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    // Izinkan localhost dan IP lokal (192.168.x.x) di mode development
+    if (
+      process.env.NODE_ENV === 'development' || 
+      origin.startsWith('http://localhost') || 
+      origin.startsWith('http://192.168.') ||
+      origin.startsWith('http://127.0.0.1')
+    ) {
+      return callback(null, true);
+    }
+    const allowed = process.env.FRONTEND_URL || 'http://localhost:3000';
+    if (origin === allowed) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());

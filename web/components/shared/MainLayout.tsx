@@ -18,7 +18,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <main className="flex flex-row justify-center max-w-7xl mx-auto w-full relative">
         <LeftSidebar />
         
-        <section className="flex min-h-screen flex-1 flex-col px-6 pb-10 pt-28 max-md:pb-32 sm:px-10 overflow-x-hidden">
+        <section className="flex min-h-screen flex-1 flex-col px-6 pb-10 pt-28 max-md:pb-24 sm:px-10 overflow-x-hidden">
           <div className="w-full max-w-2xl mx-auto">
             {children}
           </div>

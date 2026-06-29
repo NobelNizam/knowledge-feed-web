@@ -137,7 +137,7 @@ export default function Home() {
             
             <button
               onClick={toggleFilter}
-              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors md:hidden"
+              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors lg:hidden"
               title="Toggle Filter"
             >
               <Filter className="w-5 h-5" />

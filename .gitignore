@@ -6,3 +6,13 @@ web/node_modules/
 AGENT_MEMORY.md
 *storybook.log
 storybook-static
+
+# Environment files
+.env.local
+.env*.local
+web/.env.local
+web/.env*.local
+
+# Build files
+*.tsbuildinfo
+
