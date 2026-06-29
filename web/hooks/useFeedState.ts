@@ -30,6 +30,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
 
   const limit = 10;
   const touchStartRef = useRef(0);
+  const prevPreferencesRef = useRef<string>('');
 
   // Extract current feed state
   const currentFeed = feeds[currentDomainKey] || {
@@ -202,6 +203,22 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
       setPullProgress(0);
     }
   }, [user, feeds]);
+
+  // Reset feed cache if user preferences change
+  useEffect(() => {
+    if (user && isInitialized && !isRestoring) {
+      const currentPreferencesString = JSON.stringify(user?.preferences?.domains || []);
+      if (prevPreferencesRef.current && prevPreferencesRef.current !== currentPreferencesString) {
+        console.log("[useFeedState] Preferences changed, resetting feed cache");
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('feed_tab_states');
+        }
+        setFeeds({});
+        loadFeed(0, true, activeFilter);
+      }
+      prevPreferencesRef.current = currentPreferencesString;
+    }
+  }, [user, isInitialized, isRestoring, activeFilter, loadFeed]);
 
   // Load feed on active filter changes
   useEffect(() => {

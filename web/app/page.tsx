@@ -88,8 +88,11 @@ export default function Home() {
     return (
       <OnboardingView 
         availableDomains={availableDomains} 
-        onComplete={() => {
-          refreshUser();
+        onComplete={async () => {
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('feed_tab_states');
+          }
+          await refreshUser();
           setShowOnboarding(false);
         }} 
       />

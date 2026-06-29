@@ -101,25 +101,28 @@ export const userAPI = {
 
 export const interactionAPI = {
   likeCard: async (cardId: string) => {
-    // API Ready: POST /api/knowledge/:id/like
-    // Mocking response for now until backend is implemented
-    return { success: true };
+    const response = await api.post(`/knowledge/${cardId}/like`);
+    return response.data;
   },
 
   viewCard: async (cardId: string) => {
-    // API Ready: POST /api/knowledge/:id/view
-    return { success: true };
+    const response = await api.post(`/knowledge/${cardId}/view`);
+    return response.data;
+  },
+
+  shareCard: async (cardId: string) => {
+    const response = await api.post(`/knowledge/${cardId}/share`);
+    return response.data;
   },
 
   getComments: async (cardId: string) => {
-    // API Ready: GET /api/knowledge/:id/comments
-    // Mocking empty comments
-    return { success: true, data: [] };
+    const response = await api.get(`/knowledge/${cardId}/comments`);
+    return response.data;
   },
 
   addComment: async (cardId: string, text: string, parentId?: string) => {
-    // API Ready: POST /api/knowledge/:id/comments
-    return { success: true, data: { id: Date.now(), text, parentId, createdAt: new Date() } };
+    const response = await api.post(`/knowledge/${cardId}/comments`, { text, parentId });
+    return response.data;
   }
 };
 

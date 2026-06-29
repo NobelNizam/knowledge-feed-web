@@ -78,7 +78,13 @@ router.post('/register', authLimiter, async (req, res) => {
           create: { domains: [] },
         },
       },
-      select: { id: true, name: true, email: true, role: true },
+      select: { 
+        id: true, 
+        name: true, 
+        email: true, 
+        role: true,
+        preferences: true
+      },
     });
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
@@ -100,7 +106,10 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+      where: { email },
+      include: { preferences: true }
+    });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -114,7 +123,19 @@ router.post('/login', authLimiter, async (req, res) => {
     setTokenCookie(res, accessToken, false);
     setTokenCookie(res, refreshToken, true);
     
+    // Dynamic fallback for user preferences if it is null
+    let userPreferences = user.preferences;
+    if (!userPreferences) {
+      userPreferences = await prisma.userPreferences.create({
+        data: {
+          userId: user.id,
+          domains: [],
+        }
+      });
+    }
+
     const { password: _, ...userWithoutPassword } = user;
+    userWithoutPassword.preferences = userPreferences;
     res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error('Login error:', error);
@@ -180,6 +201,16 @@ router.get('/me', authMiddleware, async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Dynamic fallback for user preferences if it is null
+    if (!user.preferences) {
+      user.preferences = await prisma.userPreferences.create({
+        data: {
+          userId: user.id,
+          domains: [],
+        }
+      });
     }
 
     const { password, ...userWithoutPassword } = user;

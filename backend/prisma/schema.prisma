@@ -27,6 +27,7 @@ model KnowledgeCard {
   
   viewCount       Int      @default(0) @map("view_count")
   saveCount       Int      @default(0) @map("save_count")
+  shareCount      Int      @default(0) @map("share_count")
   engagementScore Float    @default(0) @map("engagement_score")
   
   // RAG Pipeline fields
@@ -41,6 +42,9 @@ model KnowledgeCard {
   
   savedBy         User[]   @relation("SavedCards")
   factCheckResults FactCheckResult[]
+  likes           Like[]
+  views           View[]
+  comments        Comment[]
   
   @@map("knowledge_cards")
 }
@@ -63,6 +67,9 @@ model User {
   preferences  UserPreferences?
   savedCards   KnowledgeCard[] @relation("SavedCards")
   sessions     Session[]
+  likes        Like[]
+  views        View[]
+  comments     Comment[]
   
   @@map("users")
 }
@@ -185,4 +192,48 @@ model PipelineJob {
   createdAt     DateTime  @default(now()) @map("created_at")
   
   @@map("pipeline_jobs")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@map("likes")
+}
+
+model View {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  cardId    String   @map("card_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@map("views")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  parentId  String?  @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  @@map("comments")
 }

@@ -6,7 +6,7 @@ import { Heart, MessageCircle, Bookmark, Share } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
-import { userAPI } from '@/lib/api';
+import { userAPI, interactionAPI } from '@/lib/api';
 
 export interface KnowledgeFeedCardProps {
   card: {
@@ -19,6 +19,11 @@ export interface KnowledgeFeedCardProps {
     sourceName?: string;
     viewCount?: number;
     saveCount?: number;
+    likeCount?: number;
+    shareCount?: number;
+    liked?: boolean;
+    saved?: boolean;
+    commentsCount?: number;
     createdAt?: string;
   };
   isDetailView?: boolean;
@@ -46,9 +51,9 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   const { user, refreshUser } = useAuth();
   const router = useRouter();
 
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [likeCount, setLikeCount] = useState(card.saveCount || 0);
+  const [liked, setLiked] = useState(card.liked || false);
+  const [saved, setSaved] = useState(card.saved || false);
+  const [likeCount, setLikeCount] = useState(card.likeCount || 0);
 
   const domainColor = DOMAIN_COLORS[card.domain?.toLowerCase()] || 'bg-neutral-500';
   const domainIcon = DOMAIN_ICONS[card.domain?.toLowerCase()] || '📚';
@@ -58,18 +63,52 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
     if (user && user.savedCards) {
       setSaved(user.savedCards.some((c: any) => c.id === card.id));
     } else {
-      setSaved(false);
+      setSaved(card.saved || false);
     }
-  }, [user, card.id]);
+  }, [user, card.id, card.saved]);
 
-  const handleLike = (e: React.MouseEvent) => {
+  // Sinkronisasi status liked/likeCount jika properti card berubah
+  useEffect(() => {
+    if (card.liked !== undefined) setLiked(card.liked);
+    if (card.likeCount !== undefined) setLikeCount(card.likeCount);
+  }, [card.liked, card.likeCount]);
+
+  const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!liked) {
-      setLiked(true);
-      setLikeCount(prev => prev + 1);
-    } else {
-      setLiked(false);
-      setLikeCount(prev => prev - 1);
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const previousLiked = liked;
+    const previousLikeCount = likeCount;
+
+    setLiked(!liked);
+    setLikeCount(prev => liked ? prev - 1 : prev + 1);
+
+    try {
+      const res = await interactionAPI.likeCard(card.id);
+      if (res.success) {
+        setLiked(res.liked);
+        setLikeCount(res.likeCount);
+      }
+    } catch (error) {
+      setLiked(previousLiked);
+      setLikeCount(previousLikeCount);
+      console.error('Failed to toggle like:', error);
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      const shareUrl = `${window.location.origin}/card/${card.id}`;
+      await navigator.clipboard.writeText(shareUrl);
+      
+      await interactionAPI.shareCard(card.id);
+      alert('Tautan postingan berhasil disalin!');
+    } catch (error) {
+      console.error('Failed to share:', error);
     }
   };
 
@@ -180,11 +219,14 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
                 <MessageCircle className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
               </div>
               <span className="text-xs font-medium text-muted-foreground group-hover:text-blue-500">
-                Balas
+                {card.commentsCount !== undefined && card.commentsCount > 0 ? `${card.commentsCount} Balasan` : 'Balas'}
               </span>
             </Link>
 
-            <button className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-green-500/10 group transition-colors">
+            <button 
+              onClick={handleShare}
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-green-500/10 group transition-colors"
+            >
               <Share className="h-5 w-5 text-muted-foreground group-hover:text-green-500 transition-colors" />
             </button>
 

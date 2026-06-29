@@ -34,7 +34,15 @@ async function populateCacheIfNeeded(domainTarget, domainFilter) {
 router.get('/', async (req, res) => {
   try {
     const { limit = 20, offset = 0, domains, seenIds } = req.query;
-    const userId = getUserId(req);
+    let userId = null;
+    const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        userId = decoded.userId;
+      } catch (e) {}
+    }
     
     const domainFilter = domains ? domains.split(',') : null;
     const domainTarget = domainFilter && domainFilter.length > 0 
@@ -88,6 +96,32 @@ router.get('/', async (req, res) => {
       cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
     }
 
+    const cardIds = cards.map(c => c.id);
+    const [likes, userLikes, comments, savedCards] = await Promise.all([
+      prisma.like.groupBy({
+        by: ['cardId'],
+        where: { cardId: { in: cardIds } },
+        _count: { id: true }
+      }),
+      userId ? prisma.like.findMany({
+        where: { userId, cardId: { in: cardIds } }
+      }) : [],
+      prisma.comment.groupBy({
+        by: ['cardId'],
+        where: { cardId: { in: cardIds } },
+        _count: { id: true }
+      }),
+      userId ? prisma.user.findUnique({
+        where: { id: userId },
+        select: { savedCards: { select: { id: true } } }
+      }) : null
+    ]);
+
+    const likesMap = Object.fromEntries(likes.map(l => [l.cardId, l._count.id]));
+    const likedSet = new Set(userLikes.map(ul => ul.cardId));
+    const commentsMap = Object.fromEntries(comments.map(c => [c.cardId, c._count.id]));
+    const savedSet = new Set(savedCards?.savedCards?.map(sc => sc.id) || []);
+
     const responseData = {
       success: true,
       data: cards.map(row => ({
@@ -103,6 +137,7 @@ router.get('/', async (req, res) => {
         generatedAt: row.generatedAt || row.generated_at,
         viewCount: row.viewCount || row.view_count,
         saveCount: row.saveCount || row.save_count,
+        shareCount: row.shareCount || row.share_count || 0,
         engagementScore: row.engagementScore || row.engagement_score,
         factChecked: row.factChecked || row.fact_checked,
         factCheckScore: row.factCheckScore || row.fact_check_score,
@@ -110,7 +145,11 @@ router.get('/', async (req, res) => {
         sourceChunkIds: row.sourceChunkIds || row.source_chunk_ids,
         citations: row.citations,
         createdAt: row.createdAt || row.created_at,
-        updatedAt: row.updatedAt || row.updated_at
+        updatedAt: row.updatedAt || row.updated_at,
+        likeCount: likesMap[row.id] || 0,
+        liked: likedSet.has(row.id),
+        saved: savedSet.has(row.id),
+        commentsCount: commentsMap[row.id] || 0
       })),
       pagination: {
         limit: parseInt(limit),
@@ -131,7 +170,15 @@ router.post('/personalized', async (req, res) => {
   try {
     const { limit = 20, offset = 0 } = req.query;
     const { domains, seenIds } = req.body;
-    const userId = getUserId(req);
+    let userId = null;
+    const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        userId = decoded.userId;
+      } catch (e) {}
+    }
 
     if (!domains || domains.length === 0) {
       return res.status(400).json({ error: 'Domains required' });
@@ -177,6 +224,32 @@ router.post('/personalized', async (req, res) => {
       cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
     }
 
+    const cardIds = cards.map(c => c.id);
+    const [likes, userLikes, comments, savedCards] = await Promise.all([
+      prisma.like.groupBy({
+        by: ['cardId'],
+        where: { cardId: { in: cardIds } },
+        _count: { id: true }
+      }),
+      userId ? prisma.like.findMany({
+        where: { userId, cardId: { in: cardIds } }
+      }) : [],
+      prisma.comment.groupBy({
+        by: ['cardId'],
+        where: { cardId: { in: cardIds } },
+        _count: { id: true }
+      }),
+      userId ? prisma.user.findUnique({
+        where: { id: userId },
+        select: { savedCards: { select: { id: true } } }
+      }) : null
+    ]);
+
+    const likesMap = Object.fromEntries(likes.map(l => [l.cardId, l._count.id]));
+    const likedSet = new Set(userLikes.map(ul => ul.cardId));
+    const commentsMap = Object.fromEntries(comments.map(c => [c.cardId, c._count.id]));
+    const savedSet = new Set(savedCards?.savedCards?.map(sc => sc.id) || []);
+
     const responseData = {
       success: true,
       data: cards.map(row => ({
@@ -192,6 +265,7 @@ router.post('/personalized', async (req, res) => {
         generatedAt: row.generatedAt || row.generated_at,
         viewCount: row.viewCount || row.view_count,
         saveCount: row.saveCount || row.save_count,
+        shareCount: row.shareCount || row.share_count || 0,
         engagementScore: row.engagementScore || row.engagement_score,
         factChecked: row.factChecked || row.fact_checked,
         factCheckScore: row.factCheckScore || row.fact_check_score,
@@ -199,7 +273,11 @@ router.post('/personalized', async (req, res) => {
         sourceChunkIds: row.sourceChunkIds || row.source_chunk_ids,
         citations: row.citations,
         createdAt: row.createdAt || row.created_at,
-        updatedAt: row.updatedAt || row.updated_at
+        updatedAt: row.updatedAt || row.updated_at,
+        likeCount: likesMap[row.id] || 0,
+        liked: likedSet.has(row.id),
+        saved: savedSet.has(row.id),
+        commentsCount: commentsMap[row.id] || 0
       })),
       pagination: {
         limit: parseInt(limit),
