@@ -65,6 +65,20 @@ router.get('/domains', async (req, res) => {
   }
 });
 
+// GET /api/knowledge/tags - Get all unique tags (YAGNI/Ponytail)
+router.get('/tags', async (req, res) => {
+  try {
+    const cards = await prisma.knowledgeCard.findMany({
+      select: { tags: true }
+    });
+    const allTags = Array.from(new Set(cards.flatMap(c => c.tags || [])));
+    res.json({ success: true, data: allTags });
+  } catch (error) {
+    console.error('Tags error:', error);
+    res.status(500).json({ error: 'Failed to fetch tags' });
+  }
+});
+
 // GET /api/knowledge/:id - Get single card
 router.get('/:id', async (req, res) => {
   try {

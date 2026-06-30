@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -75,6 +75,11 @@ export const knowledgeAPI = {
     const response = await api.get('/knowledge/domains');
     return response.data;
   },
+
+  getTags: async () => {
+    const response = await api.get('/knowledge/tags');
+    return response.data;
+  },
 };
 
 export const userAPI = {
@@ -95,6 +100,11 @@ export const userAPI = {
 
   saveCard: async (cardId: string) => {
     const response = await api.post(`/user/save`, { cardId });
+    return response.data;
+  },
+
+  updateProfile: async (name: string, avatarUrl?: string) => {
+    const response = await api.put('/user/profile', { name, avatarUrl });
     return response.data;
   },
 };

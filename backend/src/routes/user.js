@@ -79,5 +79,42 @@ router.post('/save', async (req, res) => {
   }
 });
 
+// PUT /api/user/profile - Update user profile (name, avatarUrl) (YAGNI / Ponytail)
+router.put('/profile', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { name, avatarUrl } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Nama tidak boleh kosong' });
+    }
+
+    // Validasi unik name
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: 'insensitive' },
+        id: { not: userId }
+      }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Nama profil tersebut sudah digunakan pengguna lain' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { 
+        name: name.trim(), 
+        avatarUrl 
+      },
+    });
+
+    res.json({ success: true, data: updatedUser });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Gagal memperbarui profil' });
+  }
+});
+
 module.exports = router;
 
