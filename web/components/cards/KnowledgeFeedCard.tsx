@@ -237,10 +237,19 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
     : 'Baru saja';
 
   return (
-    <article className="flex w-full flex-col border-b border-border bg-background px-4 py-4 sm:px-6">
-      <Link href={`/card/${card.id}`} className="flex w-full">
+    <article className="relative flex w-full flex-col border-b border-border bg-background px-3 py-4 sm:px-5">
+      {/* Absolute Overlay Link untuk detail card */}
+      {!isDetailView && (
+        <Link 
+          href={`/card/${card.id}`} 
+          className="absolute inset-0 z-0 cursor-pointer"
+          aria-label={`Lihat detail ${card.title}`}
+        />
+      )}
+
+      <div className="flex w-full">
         {/* Left column: Vertical line aesthetic */}
-        <div className="flex flex-col items-center mr-4">
+        <div className="flex flex-col items-center mr-3 sm:mr-4 shrink-0">
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border flex items-center justify-center text-xl bg-card">
             {domainIcon}
           </div>
@@ -248,11 +257,11 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
         </div>
 
         {/* Right column: Content */}
-        <div className="flex w-full flex-col">
+        <div className="flex w-full flex-col min-w-0">
           {/* Header */}
           <div className="flex justify-between items-center w-full">
             <div className="flex items-center gap-2">
-              <span className={cn('px-2 py-0.5 text-xs font-bold text-white rounded-full', domainColor)}>
+              <span className={cn('px-2 py-0.5 text-xs font-bold text-white rounded-full relative z-10', domainColor)}>
                 {card.domain?.toUpperCase()}
               </span>
             </div>
@@ -273,7 +282,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
 
           {/* Tags */}
           {card.tags && card.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2 relative z-10">
               {card.tags.slice(0, 4).map((tag, i) => (
                 <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-md font-medium">
                   #{tag}
@@ -284,7 +293,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
 
           {/* Source Link */}
           {isDetailView && card.sourceUrl && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-lg border border-border">
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg border border-border relative z-10">
               <p className="text-xs text-muted-foreground font-medium mb-1">Sumber:</p>
               <a href={card.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1 break-all">
                 🔗 {card.sourceName || card.sourceUrl}
@@ -293,49 +302,65 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
           )}
 
           {/* Interaction Bar */}
-          <div className="mt-4 flex items-center gap-6">
+          <div className="mt-4 flex items-center gap-4 sm:gap-6 relative z-10">
             <button 
-              onClick={handleLike}
-              className="flex items-center gap-1.5 group"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike(e);
+              }}
+              className="flex items-center gap-1.5 group h-9 min-w-[36px] px-2 justify-center rounded-full hover:bg-red-500/10 transition-colors"
+              title="Like"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full group-hover:bg-red-500/10 transition-colors">
-                <Heart 
-                  className={cn("h-5 w-5 transition-colors", liked ? "fill-red-500 text-red-500" : "text-muted-foreground group-hover:text-red-500")} 
-                />
-              </div>
+              <Heart 
+                className={cn("h-5 w-5 transition-colors", liked ? "fill-red-500 text-red-500" : "text-muted-foreground group-hover:text-red-500")} 
+              />
               <span className={cn("text-xs font-medium", liked ? "text-red-500" : "text-muted-foreground group-hover:text-red-500")}>
                 {likeCount > 0 ? likeCount : ''}
               </span>
             </button>
 
-            <Link href={`/card/${card.id}`} className="flex items-center gap-1.5 group" onClick={(e) => isDetailView && e.preventDefault()}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full group-hover:bg-blue-500/10 transition-colors">
-                <MessageCircle className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
-              </div>
+            <button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isDetailView) {
+                  router.push(`/card/${card.id}`);
+                }
+              }}
+              className="flex items-center gap-1.5 group h-9 min-w-[36px] px-2 justify-center rounded-full hover:bg-blue-500/10 transition-colors"
+              title="Balas"
+            >
+              <MessageCircle className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
               <span className="text-xs font-medium text-muted-foreground group-hover:text-blue-500">
-                {commentsCount > 0 ? `${commentsCount} Balasan` : 'Balas'}
+                {commentsCount > 0 ? commentsCount : 'Balas'}
               </span>
-            </Link>
+            </button>
 
             <button 
-              onClick={handleShare}
-              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-green-500/10 group transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShare(e);
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-green-500/10 group transition-colors"
+              title="Bagikan"
             >
               <Share className="h-5 w-5 text-muted-foreground group-hover:text-green-500 transition-colors" />
             </button>
 
-            <div className="ml-auto flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-2 sm:gap-4">
               <span className="text-xs text-muted-foreground mr-1">👁️ {viewCount}</span>
               
               <button 
-                onClick={handleSave}
-                className="flex items-center gap-1 group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSave(e);
+                }}
+                className="flex items-center gap-1 group h-9 min-w-[36px] px-2 justify-center rounded-full hover:bg-primary/10 transition-colors"
+                title="Simpan"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full group-hover:bg-primary/10 transition-colors">
-                  <Bookmark 
-                    className={cn("h-5 w-5 transition-colors", saved ? "fill-primary text-primary" : "text-muted-foreground group-hover:text-primary")} 
-                  />
-                </div>
+                <Bookmark 
+                  className={cn("h-5 w-5 transition-colors", saved ? "fill-primary text-primary" : "text-muted-foreground group-hover:text-primary")} 
+                />
                 <span className={cn("text-xs font-medium", saved ? "text-primary" : "text-muted-foreground group-hover:text-primary")}>
                   {saveCount > 0 ? saveCount : ''}
                 </span>
@@ -343,7 +368,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
             </div>
           </div>
         </div>
-      </Link>
+      </div>
 
       {/* Share Modal Glassmorphism (Ponytail/YAGNI) */}
       {showShareModal && (

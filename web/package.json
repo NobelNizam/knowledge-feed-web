@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "nodemon --watch next.config.js --watch .env.local --exec \"next dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -48,6 +48,7 @@
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.3",
     "vite": "^8.1.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "nodemon": "^3.1.14"
   }
 }

@@ -11,6 +11,7 @@ interface User {
   role: 'USER' | 'ADMIN';
   preferences?: any;
   savedCards?: any[];
+  avatarUrl?: string;
 }
 
 interface AuthContextType {
