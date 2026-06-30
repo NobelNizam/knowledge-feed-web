@@ -31,6 +31,11 @@ Sebelum menjalankan server web atau API, selalu periksa apakah port tersebut sud
     ```bash
     ss -tuln | grep -E '3000|3001'
     ```
+    Jika port `3001` dalam keadaan LISTEN namun server crash atau Anda ingin me-restart-nya secara bersih, temukan PID proses Node lama dan matikan:
+    ```bash
+    lsof -i :3001
+    kill <PID>
+    ```
 2.  **Verifikasi Kontainer Docker**:
     Gunakan `docker ps` untuk memastikan kontainer database/cache aktif. Jika kontainer mati, jalankan dengan perintah:
     ```bash
@@ -65,3 +70,32 @@ Sebelum menjalankan server web atau API, selalu periksa apakah port tersebut sud
     ALTER TABLE document_chunks ADD COLUMN embedding vector(1024);
     ```
 *   **Tindakan**: Saat menjalankan perintah `npx prisma db push`, Prisma akan memberikan peringatan *data loss* terkait penghapusan kolom `embedding` ini. **Hati-hati** agar tidak menghancurkan kolom ini di database saat memperbarui skema, kecuali jika memang ingin melakukan reset schema penuh.
+
+### C. Pengaturan API URL di Lingkungan Sandbox (.env.local)
+*   **Isu**: Pengguna mungkin mengubah `NEXT_PUBLIC_API_URL` di berkas `web/.env.local` menjadi IP jaringan lokal (misal `http://192.168.100.14:3001/api`) untuk keperluan pengujian via smartphone. Namun, IP eksternal ini tidak dapat diakses dari dalam lingkungan sandbox terisolasi tempat agen AI dijalankan.
+*   **Tindakan**: Saat mendiagnosis kegagalan koneksi API frontend/backend di lingkungan sandbox, pastikan `NEXT_PUBLIC_API_URL` dikembalikan ke `http://localhost:3001/api`. Informasikan pengguna mengenai hal ini jika mereka ingin mengujinya di smartphone.
+
+### D. Parameter Input NVIDIA NIM Embedding API
+*   **Isu**: API NVIDIA NIM `/embeddings` (misal model `nvidia/nv-embedqa-e5-v5`) akan mengembalikan error HTTP 500 (`Unexpected error: pinned input buffer H2D: failed to perform CUDA copy`) jika parameter `input` dikirimkan berupa string tunggal (`string`). API ini mewajibkan parameter `input` berupa array of strings (`string[]`).
+*   **Tindakan**: Selalu bungkus teks input ke dalam format array (`Array.isArray(input) ? input : [input]`) sebelum dikirimkan ke endpoint API NVIDIA NIM.
+
+### E. Inisialisasi Prisma Client di Backend
+*   **Tindakan**: Jangan mengimpor prisma dari file library lokal yang tidak ada (seperti `../lib/prisma`). Selalu gunakan impor standar PrismaClient di backend routes/controllers:
+    ```javascript
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    ```
+
+### F. Optimasi Kueri Sosial di Feed (Pola Batch Query)
+*   **Isu**: Menampilkan metadata interaksi (likeCount, liked status, commentsCount) untuk banyak kartu di feed rawan isu 1+N query jika dilakukan dalam per-looping.
+*   **Tindakan**: Lakukan batching query secara paralel menggunakan `Promise.all` dan operator `in` di Prisma:
+    ```javascript
+    const cardIds = cards.map(c => c.id);
+    const [likes, userLikes, comments] = await Promise.all([
+      prisma.like.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } }),
+      userId ? prisma.like.findMany({ where: { userId, cardId: { in: cardIds } } }) : [],
+      prisma.comment.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } })
+    ]);
+    ```
+    Petakan hasil query tersebut menggunakan Map/Set di memori sebelum mengembalikan response JSON.
+

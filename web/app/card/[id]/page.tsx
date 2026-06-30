@@ -8,6 +8,33 @@ import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { RefreshCw, ArrowLeft, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
+const updateCardInCache = (cardId: string, updates: any) => {
+  if (typeof window === 'undefined') return;
+  const savedStates = sessionStorage.getItem('feed_tab_states');
+  if (!savedStates) return;
+  try {
+    const parsed = JSON.parse(savedStates);
+    let changed = false;
+    for (const key of Object.keys(parsed)) {
+      const tabState = parsed[key];
+      if (tabState.cards) {
+        tabState.cards = tabState.cards.map((c: any) => {
+          if (c.id === cardId) {
+            changed = true;
+            return { ...c, ...updates };
+          }
+          return c;
+        });
+      }
+    }
+    if (changed) {
+      sessionStorage.setItem('feed_tab_states', JSON.stringify(parsed));
+    }
+  } catch (e) {
+    console.error('Failed to update cache:', e);
+  }
+};
+
 export default function CardDetail({ params }: { params: { id: string } }) {
   const [card, setCard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -27,7 +54,16 @@ export default function CardDetail({ params }: { params: { id: string } }) {
           setCard(res.data);
           
           // Rekam view
-          await interactionAPI.viewCard(params.id);
+          const viewRes = await interactionAPI.viewCard(params.id);
+          if (viewRes.success && viewRes.viewCount !== undefined) {
+            setCard((prev: any) => prev ? { ...prev, viewCount: viewRes.viewCount } : null);
+            
+            // Sync dengan feed utama dan cache
+            window.dispatchEvent(new CustomEvent('card-interaction', {
+              detail: { cardId: params.id, viewCount: viewRes.viewCount }
+            }));
+            updateCardInCache(params.id, { viewCount: viewRes.viewCount });
+          }
         } else {
           setError(res.error || 'Failed to load card');
         }
@@ -76,6 +112,8 @@ export default function CardDetail({ params }: { params: { id: string } }) {
         
         // Refresh comments list
         const refreshed = await interactionAPI.getComments(params.id);
+        const newCommentsCount = refreshed.data ? refreshed.data.length : 0;
+        
         if (refreshed.success) {
           setComments(refreshed.data || []);
         }
@@ -85,9 +123,15 @@ export default function CardDetail({ params }: { params: { id: string } }) {
           if (!prev) return null;
           return {
             ...prev,
-            commentsCount: (prev.commentsCount || 0) + 1
+            commentsCount: newCommentsCount
           };
         });
+
+        // Sync dengan feed utama dan cache
+        window.dispatchEvent(new CustomEvent('card-interaction', {
+          detail: { cardId: params.id, commentsCount: newCommentsCount }
+        }));
+        updateCardInCache(params.id, { commentsCount: newCommentsCount });
       }
     } catch (err) {
       console.error('Failed to submit comment:', err);

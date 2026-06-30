@@ -8,13 +8,12 @@
 
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const authMiddleware = require('../middleware/auth');
 const { addPipelineJob, getQueueStats } = require('../queue/queueManager');
 const { createPipelineJob } = require('../pipeline/publisher');
 const { executePipeline } = require('../queue/workers/pipelineWorker');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 /**
  * POST /api/generate
@@ -194,3 +193,4 @@ router.get('/sources', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+

@@ -6,9 +6,8 @@
  */
 
 const axios = require('axios');
-const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 const MIN_CONFIDENCE = parseFloat(process.env.FACT_CHECK_MIN_CONFIDENCE) || 0.6;
 
@@ -280,3 +279,4 @@ module.exports = {
   calculateRelevance,
   MIN_CONFIDENCE,
 };
+

@@ -1,14 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const authMiddleware = require('../middleware/auth');
 
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
-const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'fallback_refresh_secret';
+const prisma = require('../lib/prisma');
+const { JWT_SECRET, REFRESH_TOKEN_SECRET } = require('../lib/jwtSecrets');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -214,6 +212,39 @@ router.get('/me', authMiddleware, async (req, res) => {
     }
 
     const { password, ...userWithoutPassword } = user;
+    
+    // Enrich savedCards dengan data interaksi dinamis (Ponytail / YAGNI)
+    if (user.savedCards && user.savedCards.length > 0) {
+      const cardIds = user.savedCards.map(c => c.id);
+      const [likes, userLikes, comments] = await Promise.all([
+        prisma.like.groupBy({
+          by: ['cardId'],
+          where: { cardId: { in: cardIds } },
+          _count: { id: true }
+        }),
+        prisma.like.findMany({
+          where: { userId: user.id, cardId: { in: cardIds } }
+        }),
+        prisma.comment.groupBy({
+          by: ['cardId'],
+          where: { cardId: { in: cardIds } },
+          _count: { id: true }
+        })
+      ]);
+
+      const likesMap = Object.fromEntries(likes.map(l => [l.cardId, l._count.id]));
+      const likedSet = new Set(userLikes.map(ul => ul.cardId));
+      const commentsMap = Object.fromEntries(comments.map(c => [c.cardId, c._count.id]));
+
+      userWithoutPassword.savedCards = user.savedCards.map(row => ({
+        ...row,
+        likeCount: likesMap[row.id] || 0,
+        liked: likedSet.has(row.id),
+        saved: true,
+        commentsCount: commentsMap[row.id] || 0
+      }));
+    }
+
     res.json({ success: true, data: userWithoutPassword });
   } catch (error) {
     console.error('Fetch me error:', error);
@@ -222,3 +253,4 @@ router.get('/me', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+

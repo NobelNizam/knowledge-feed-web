@@ -39,6 +39,10 @@ router.post('/save', async (req, res) => {
       include: { savedCards: { where: { id: cardId } } }
     });
 
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const isSaved = user.savedCards.length > 0;
 
     let updatedUser;
@@ -48,11 +52,23 @@ router.post('/save', async (req, res) => {
         data: { savedCards: { disconnect: { id: cardId } } },
         include: { savedCards: true },
       });
+
+      // Decrement saveCount
+      await prisma.knowledgeCard.update({
+        where: { id: cardId },
+        data: { saveCount: { decrement: 1 } }
+      });
     } else {
       updatedUser = await prisma.user.update({
         where: { id: userId },
         data: { savedCards: { connect: { id: cardId } } },
         include: { savedCards: true },
+      });
+
+      // Increment saveCount
+      await prisma.knowledgeCard.update({
+        where: { id: cardId },
+        data: { saveCount: { increment: 1 } }
       });
     }
 
@@ -64,3 +80,4 @@ router.post('/save', async (req, res) => {
 });
 
 module.exports = router;
+

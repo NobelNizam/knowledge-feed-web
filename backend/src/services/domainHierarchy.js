@@ -280,6 +280,24 @@ function resolveFilterToTopics(filterType, filterValue) {
     return { disciplines: [filterValue], subtopicMap };
   }
   
+  if (filterType === 'preferences') {
+    // filterValue berisi array preferences user, e.g. ["Physics", "Artificial Intelligence"]
+    const userPrefs = Array.isArray(filterValue) ? filterValue : [];
+    if (userPrefs.length === 0) {
+      return resolveFilterToTopics('all', 'Semua');
+    }
+    
+    const picked = pickRandom(userPrefs, Math.min(5, userPrefs.length));
+    const subtopicMap = {};
+    
+    for (const disc of picked) {
+      const allSubtopics = getLevel3ForLevel2(disc);
+      subtopicMap[disc] = pickRandom(allSubtopics, Math.min(2, allSubtopics.length));
+    }
+    
+    return { disciplines: picked, subtopicMap };
+  }
+  
   // 'all': pick random disciplines across all domains
   const allLevel2 = getAllLevel2();
   const picked = pickRandom(allLevel2, 5);

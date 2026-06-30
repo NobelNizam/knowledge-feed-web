@@ -97,8 +97,7 @@ async function run() {
       }
 
       try {
-        const { PrismaClient } = require('@prisma/client');
-        const prisma = new PrismaClient();
+                const prisma = require('../lib/prisma');
         const job = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
 
         if (!job) {
@@ -137,3 +136,4 @@ Usage:
 }
 
 run();
+

@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { PrismaClient } = require('@prisma/client');
 const cookieParser = require('cookie-parser');
 
 const authRoutes = require('./routes/auth');
@@ -14,7 +13,7 @@ const adminRoutes = require('./routes/admin');
 const generateRoutes = require('./routes/generate');
 
 const app = express();
-const prisma = new PrismaClient();
+const prisma = require('./lib/prisma');
 
 // Security Middlewares
 app.use(helmet());
@@ -44,7 +43,7 @@ app.use(cookieParser());
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  if (req.method === 'POST') console.log('  Body:', req.body);
+  if (req.method === 'POST') console.log('  Body:', { ...req.body, password: req.body?.password ? '[REDACTED]' : undefined });
   next();
 });
 
@@ -110,3 +109,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, prisma };
+

@@ -20,8 +20,7 @@ const { factCheckCard, saveFactCheckResults } = require('../../pipeline/factChec
 const { moderateCard } = require('../../pipeline/moderator');
 const { publishCard, updateJobStatus, invalidateFeedCache } = require('../../pipeline/publisher');
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../../lib/prisma');
 
 /**
  * Update progress pada database PipelineJob
@@ -331,3 +330,4 @@ module.exports = {
   executePipeline,
   createPipelineWorker,
 };
+

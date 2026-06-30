@@ -204,3 +204,35 @@ export function getDisciplineDescription(name: string): string {
   
   return "Disiplin akademik untuk pembelajaran ilmiah dan kajian teoretis.";
 }
+
+/**
+ * Mendapatkan rumpun Level 1 parent dari nama disiplin Level 2
+ */
+export function getParentDomain(disciplineName: string): string {
+  if (!disciplineName) return 'Interdisciplinary Sciences';
+  const normalized = disciplineName.toLowerCase();
+  
+  for (const [parent, disciplines] of Object.entries(DOMAIN_LEVEL2_MAP)) {
+    if (disciplines.some(d => d.name.toLowerCase() === normalized)) {
+      return parent;
+    }
+  }
+  
+  // Quick fallbacks
+  if (normalized.includes('science')) {
+    if (normalized.includes('social')) return 'Social Sciences';
+    if (normalized.includes('computer') || normalized.includes('information')) return 'Formal Sciences';
+    return 'Natural Sciences';
+  }
+  if (normalized.includes('tech') || normalized.includes('engineering') || normalized.includes('intelligence')) {
+    return 'Engineering & Technology';
+  }
+  if (normalized.includes('health') || normalized.includes('medical') || normalized.includes('medicine')) {
+    return 'Medical & Health Sciences';
+  }
+  if (normalized.includes('art') || normalized.includes('music') || normalized.includes('history') || normalized.includes('philosophy') || normalized.includes('linguistics')) {
+    return 'Humanities & Arts';
+  }
+  
+  return 'Interdisciplinary Sciences';
+}

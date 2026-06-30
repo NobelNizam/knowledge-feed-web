@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient, Prisma } = require('@prisma/client');
+const { Prisma } = require('@prisma/client');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../lib/jwtSecrets');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 const { createPipelineJob } = require('../pipeline/publisher');
 const { addPipelineJob } = require('../queue/queueManager');
@@ -38,8 +40,7 @@ router.get('/', async (req, res) => {
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        const decoded = jwt.verify(token, JWT_SECRET);
         userId = decoded.userId;
       } catch (e) {}
     }
@@ -97,7 +98,7 @@ router.get('/', async (req, res) => {
     }
 
     const cardIds = cards.map(c => c.id);
-    const [likes, userLikes, comments, savedCards] = await Promise.all([
+    const [likes, userLikes, comments, savedCards, bookmarkCounts] = await Promise.all([
       prisma.like.groupBy({
         by: ['cardId'],
         where: { cardId: { in: cardIds } },
@@ -114,13 +115,23 @@ router.get('/', async (req, res) => {
       userId ? prisma.user.findUnique({
         where: { id: userId },
         select: { savedCards: { select: { id: true } } }
-      }) : null
+      }) : null,
+      prisma.knowledgeCard.findMany({
+        where: { id: { in: cardIds } },
+        select: {
+          id: true,
+          _count: {
+            select: { savedBy: true }
+          }
+        }
+      })
     ]);
 
     const likesMap = Object.fromEntries(likes.map(l => [l.cardId, l._count.id]));
     const likedSet = new Set(userLikes.map(ul => ul.cardId));
     const commentsMap = Object.fromEntries(comments.map(c => [c.cardId, c._count.id]));
     const savedSet = new Set(savedCards?.savedCards?.map(sc => sc.id) || []);
+    const saveCountsMap = Object.fromEntries(bookmarkCounts.map(bc => [bc.id, bc._count.savedBy]));
 
     const responseData = {
       success: true,
@@ -136,7 +147,7 @@ router.get('/', async (req, res) => {
         aiModel: row.aiModel || row.ai_model,
         generatedAt: row.generatedAt || row.generated_at,
         viewCount: row.viewCount || row.view_count,
-        saveCount: row.saveCount || row.save_count,
+        saveCount: saveCountsMap[row.id] || 0,
         shareCount: row.shareCount || row.share_count || 0,
         engagementScore: row.engagementScore || row.engagement_score,
         factChecked: row.factChecked || row.fact_checked,
@@ -174,8 +185,7 @@ router.post('/personalized', async (req, res) => {
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        const decoded = jwt.verify(token, JWT_SECRET);
         userId = decoded.userId;
       } catch (e) {}
     }
@@ -298,8 +308,33 @@ router.post('/refresh', async (req, res) => {
   try {
     const { filterType = 'all', filterValue = 'Semua' } = req.body || {};
     
+    let targetFilterType = filterType;
+    let targetFilterValue = filterValue;
+
+    if (filterType === 'all') {
+      let userId = null;
+      const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          userId = decoded.userId;
+        } catch (e) {}
+      }
+
+      if (userId) {
+        const prefs = await prisma.userPreferences.findUnique({
+          where: { userId }
+        });
+        if (prefs && prefs.domains && prefs.domains.length > 0) {
+          targetFilterType = 'preferences';
+          targetFilterValue = prefs.domains;
+          console.log(`[FeedRefresh] Loading preferences for user ${userId}: [${prefs.domains.join(', ')}]`);
+        }
+      }
+    }
+
     // Resolve filter ke topik konkret menggunakan hierarki 3 level
-    const { disciplines, subtopicMap } = resolveFilterToTopics(filterType, filterValue);
+    const { disciplines, subtopicMap } = resolveFilterToTopics(targetFilterType, targetFilterValue);
     
     console.log(`[FeedRefresh] Filter: ${filterType}/${filterValue} → Disciplines: [${disciplines.join(', ')}]`);
     if (subtopicMap && Object.keys(subtopicMap).length > 0) {
@@ -340,3 +375,5 @@ router.post('/refresh', async (req, res) => {
 });
 
 module.exports = router;
+
+

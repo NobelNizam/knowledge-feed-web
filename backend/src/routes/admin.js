@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const adminMiddleware = require('../middleware/admin');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // Apply auth and admin middleware to all admin routes
 router.use(authMiddleware);
@@ -55,3 +54,4 @@ router.get('/reports', async (req, res) => {
 });
 
 module.exports = router;
+

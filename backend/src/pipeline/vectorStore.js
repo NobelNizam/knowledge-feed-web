@@ -5,10 +5,10 @@
  * Menggunakan Prisma $queryRaw untuk operasi vector native.
  */
 
-const { PrismaClient, Prisma } = require('@prisma/client');
+const { Prisma } = require('@prisma/client');
 const { getEmbeddingDimension } = require('./embedder');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 /**
  * Initialize pgvector extension dan vector column
@@ -165,3 +165,4 @@ module.exports = {
   searchSimilar,
   getEmbeddedChunkCount,
 };
+

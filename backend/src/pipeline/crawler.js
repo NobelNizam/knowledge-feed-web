@@ -8,7 +8,7 @@
 const axios = require('axios');
 const xml2js = require('xml2js');
 
-const ARXIV_API_URL = 'http://export.arxiv.org/api/query';
+const ARXIV_API_URL = 'https://export.arxiv.org/api/query';
 const RATE_LIMIT_MS = 3000; // arXiv policy: max 1 request per 3 seconds
 
 let lastRequestTime = 0;
@@ -99,7 +99,7 @@ async function fetchPapers({ query, maxResults = 10, start = 0, sortBy = 'submit
     
     // Optimasi: Kurangi timeout menjadi 5000ms agar tidak blocking terlalu lama
     // saat ArXiv down atau rate limit (bisa fallback ke direct gen).
-    const response = await axios.get('http://export.arxiv.org/api/query', {
+    const response = await axios.get(ARXIV_API_URL, {
       params: {
         search_query: `all:${query}`,
         start: 0,
@@ -107,7 +107,7 @@ async function fetchPapers({ query, maxResults = 10, start = 0, sortBy = 'submit
         sortBy: 'submittedDate',
         sortOrder: 'descending'
       },
-      timeout: 5000 // Reduced from 30000ms to 5000ms
+      timeout: 15000 // 15 seconds to handle slower arXiv responses safely
     });const papers = await parseArxivResponse(response.data);
     console.log(`[Crawler] Fetched ${papers.length} papers from arXiv`);
     return papers;
@@ -126,20 +126,14 @@ async function fetchPapers({ query, maxResults = 10, start = 0, sortBy = 'submit
 async function fetchMultipleTopics(topics, maxPerTopic = 3) {
   let allPapers = [];
   
-  // Paralelkan pencarian untuk mempercepat, dan tangani kegagalan dengan cepat
-  const results = await Promise.all(
-    topics.map(async (topic) => {
-      try {
-        return await fetchPapers({ query: topic, maxResults: maxPerTopic });
-      } catch (error) {
-        console.warn(`[Crawler] Failed to fetch topic "${topic}":`, error.message);
-        return [];
-      }
-    })
-  );
-
-  for (const papers of results) {
-    allPapers = [...allPapers, ...papers];
+  // Proses secara sekuensial agar rateLimitWait() dapat menjeda request dengan benar (arXiv policy)
+  for (const topic of topics) {
+    try {
+      const papers = await fetchPapers({ query: topic, maxResults: maxPerTopic });
+      allPapers = [...allPapers, ...papers];
+    } catch (error) {
+      console.warn(`[Crawler] Failed to fetch topic "${topic}":`, error.message);
+    }
   }
 
   // Remove duplicates based on arXiv ID

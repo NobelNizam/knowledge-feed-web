@@ -5,9 +5,8 @@
  * ke database, dan menghapus cache feed.
  */
 
-const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 /**
  * Publish sebuah knowledge card ke database
@@ -156,3 +155,4 @@ module.exports = {
   createPipelineJob,
   invalidateFeedCache,
 };
+

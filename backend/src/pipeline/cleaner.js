@@ -6,9 +6,8 @@
  */
 
 const crypto = require('crypto');
-const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 /**
  * Strip LaTeX markup dari teks
@@ -164,3 +163,4 @@ module.exports = {
   isDuplicate,
   cleanAndDeduplicate,
 };
+

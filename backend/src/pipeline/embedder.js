@@ -24,7 +24,7 @@ async function callEmbeddingAPI(input, inputType) {
     `${NVIDIA_API_BASE_URL}/embeddings`,
     {
       model: EMBED_MODEL,
-      input: input,
+      input: Array.isArray(input) ? input : [input],
       input_type: inputType,
       encoding_format: 'float',
     },

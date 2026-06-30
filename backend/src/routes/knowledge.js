@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../lib/jwtSecrets');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // GET /api/knowledge/search - Search cards
 router.get('/search', async (req, res) => {
@@ -85,15 +86,14 @@ router.get('/:id', async (req, res) => {
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        const decoded = jwt.verify(token, JWT_SECRET);
         const userId = decoded.userId;
 
         // Cek status like
-        const likeCount = await prisma.like.count({
-          where: { userId_cardId: { userId, cardId: id } }
+        const userLikeCount = await prisma.like.count({
+          where: { userId, cardId: id }
         });
-        liked = likeCount > 0;
+        liked = userLikeCount > 0;
 
         // Cek status save/bookmark
         const user = await prisma.user.findUnique({
@@ -114,11 +114,21 @@ router.get('/:id', async (req, res) => {
       where: { cardId: id }
     });
 
+    // Hitung saveCount secara dinamis dari relasi (Ponytail/YAGNI)
+    const saveCount = await prisma.user.count({
+      where: {
+        savedCards: {
+          some: { id }
+        }
+      }
+    });
+
     const responseData = {
       ...card,
       likeCount,
       liked,
       saved,
+      saveCount,
       commentsCount
     };
 
@@ -217,8 +227,7 @@ router.post('/:id/view', async (req, res) => {
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+        const decoded = jwt.verify(token, JWT_SECRET);
         userId = decoded.userId;
       } catch (e) {
         // Abaikan
@@ -401,3 +410,5 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+
+

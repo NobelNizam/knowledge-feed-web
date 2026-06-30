@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../lib/jwtSecrets');
 
 const authMiddleware = (req, res, next) => {
   // Try to get token from HttpOnly cookie first, fallback to Auth header
@@ -9,7 +10,7 @@ const authMiddleware = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded; // { userId: "cuid" }
     next();
   } catch (error) {
