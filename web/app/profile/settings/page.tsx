@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { userAPI, knowledgeAPI } from '@/lib/api';
 import { DOMAIN_LEVEL1_LIST, DOMAIN_LEVEL2_MAP } from '@/lib/domainMapping';
-import { ArrowLeft, Save, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 
 const EMOJI_AVATARS = ['👤', '🧑‍💻', '🔬', '💻', '🏥', '🌾', '👥', '🎨', '🧬', '🪐', '🧠', '🚀', '🐱', '🦊', '🦁'];
@@ -17,12 +17,13 @@ export default function ProfileSettings() {
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('👤');
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
-  
+
+  // Accordion state (YAGNI/Ponytail)
+  const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
 
   // Protect route & init data
   useEffect(() => {
@@ -32,27 +33,12 @@ export default function ProfileSettings() {
       setName(user.name || '');
       setSelectedAvatar(user.avatarUrl || '👤');
       setSelectedDomains(user.preferences?.domains || []);
-      
-      // Fetch Level 3 tags
-      const fetchTagsAndData = async () => {
-        try {
-          const res = await knowledgeAPI.getTags();
-          if (res.success) {
-            setAvailableTags(res.data || []);
-          }
-        } catch (err) {
-          console.error('Failed to load Level 3 tags:', err);
-        } finally {
-          setLoadingData(false);
-        }
-      };
-      fetchTagsAndData();
     }
   }, [user, authLoading, router]);
 
   const toggleDomain = (domain: string) => {
-    setSelectedDomains(prev => 
-      prev.includes(domain) 
+    setSelectedDomains(prev =>
+      prev.includes(domain)
         ? prev.filter(d => d !== domain)
         : [...prev, domain]
     );
@@ -85,7 +71,7 @@ export default function ProfileSettings() {
       // Refresh data user di context
       await refreshUser();
       setSuccess(true);
-      
+
       // Clear cache feed agar preferensi baru diterapkan
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('feed_tab_states');
@@ -100,6 +86,12 @@ export default function ProfileSettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+
+
+  const toggleAccordion = (domainName: string) => {
+    setExpandedDomain(prev => prev === domainName ? null : domainName);
   };
 
   if (authLoading || (!user && !error)) {
@@ -123,7 +115,7 @@ export default function ProfileSettings() {
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="p-6 flex flex-col gap-8">
+      <form onSubmit={handleSave} className="p-6 flex flex-col gap-6">
         {error && (
           <div className="p-4 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20 font-medium">
             {error}
@@ -137,27 +129,26 @@ export default function ProfileSettings() {
         )}
 
         {/* Seksi 1: Akun & Avatar */}
-        <div className="flex flex-col gap-4">
-          <h2 className="text-sm font-bold text-primary tracking-wider uppercase">1. Profil & Avatar</h2>
-          <div className="bg-card border border-border p-5 rounded-2xl flex flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-bold text-primary tracking-wider uppercase">1. Profil & Avatar</h2>
+          <div className="bg-card border border-border p-5 rounded-2xl flex flex-col gap-5">
             {/* Pemilihan Avatar */}
             <div className="flex flex-col items-center gap-3">
-              <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center text-5xl border-2 border-primary/20 shadow-inner select-none">
+              <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center text-4xl border border-border select-none">
                 {selectedAvatar}
               </div>
-              <span className="text-xs text-muted-foreground font-medium">Pilih Emoji Avatar</span>
-              
-              <div className="flex flex-wrap justify-center gap-2 max-w-md mt-1">
+              <span className="text-[11px] text-muted-foreground font-semibold">Pilih Emoji Avatar</span>
+
+              <div className="flex flex-wrap justify-center gap-1.5 max-w-md">
                 {EMOJI_AVATARS.map(emoji => (
                   <button
                     key={emoji}
                     type="button"
                     onClick={() => setSelectedAvatar(emoji)}
-                    className={`w-10 h-10 flex items-center justify-center rounded-xl text-xl border transition-all ${
-                      selectedAvatar === emoji
-                        ? 'border-primary bg-primary/10 text-primary scale-110 shadow-sm'
+                    className={`w-9 h-9 flex items-center justify-center rounded-lg text-lg border transition-all ${selectedAvatar === emoji
+                        ? 'border-primary bg-primary/10 text-primary scale-105'
                         : 'border-border hover:bg-muted text-muted-foreground'
-                    }`}
+                      }`}
                   >
                     {emoji}
                   </button>
@@ -166,121 +157,125 @@ export default function ProfileSettings() {
             </div>
 
             {/* Nama Input */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               <label htmlFor="name-input" className="text-xs font-semibold text-muted-foreground">Nama Tampilan (Unik)</label>
               <input
                 id="name-input"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Masukkan nama tampilan unik Anda..."
-                className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl focus:outline-none focus:border-primary text-foreground text-sm font-medium transition-colors"
+                placeholder="Masukkan nama tampilan unik..."
+                className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-xl focus:outline-none focus:border-primary text-foreground text-sm font-medium transition-colors"
                 required
               />
             </div>
           </div>
         </div>
 
-        {/* Seksi 2: Preferensi Minat (Level 1 & 2) */}
-        <div className="flex flex-col gap-4">
-          <h2 className="text-sm font-bold text-primary tracking-wider uppercase">2. Minat Topik Rumpun Ilmu (Level 1 & 2)</h2>
-          <p className="text-xs text-muted-foreground -mt-2">Pilih rumpun bidang ilmu dan disiplin akademik yang ingin Anda baca di timeline.</p>
-          
-          <div className="flex flex-col gap-4">
+        {/* Seksi 2: Preferensi Minat (Dropdown Accordion - Lvl 1 s.d Lvl 3) */}
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xs font-bold text-primary tracking-wider uppercase">2. Preferensi Topik</h2>
+            <span className="text-[11px] text-muted-foreground font-medium">{selectedDomains.length} terpilih</span>
+          </div>
+          <p className="text-xs text-muted-foreground -mt-1.5">Klik pada bidang ilmu untuk membuka daftar disiplin ilmu terkait.</p>
+
+          <div className="flex flex-col gap-2">
             {DOMAIN_LEVEL1_LIST.map((level1) => {
+              const isExpanded = expandedDomain === level1.name;
               const subDomains = DOMAIN_LEVEL2_MAP[level1.name] || [];
+              const subNames = subDomains.map(s => s.name);
+
+              // Hitung jumlah terpilih dalam rumpun ini
+              const selectedCount = subDomains.filter(s => selectedDomains.includes(s.name)).length;
+
               return (
-                <div key={level1.name} className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                  {/* Level 1 Group Header */}
-                  <div className="p-4 bg-muted/40 border-b border-border flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      id={`level1-${level1.name}`}
-                      checked={subDomains.every(sub => selectedDomains.includes(sub.name))}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        const subNames = subDomains.map(s => s.name);
-                        setSelectedDomains(prev => {
-                          const base = prev.filter(d => !subNames.includes(d));
-                          return checked ? [...base, ...subNames] : base;
-                        });
-                      }}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <div>
-                      <label htmlFor={`level1-${level1.name}`} className="font-bold text-foreground text-sm cursor-pointer select-none">{level1.name}</label>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{level1.description}</p>
+                <div key={level1.name} className="bg-card border border-border rounded-xl overflow-hidden transition-all duration-200">
+                  {/* Accordion Header (YAGNI / Ponytail) */}
+                  <div
+                    onClick={() => toggleAccordion(level1.name)}
+                    className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-muted/30 select-none transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Checkbox Rumpun */}
+                      <input
+                        type="checkbox"
+                        checked={subDomains.every(sub => selectedDomains.includes(sub.name))}
+                        onChange={(e) => {
+                          e.stopPropagation(); // Cegah toggle accordion
+                          const checked = e.target.checked;
+                          setSelectedDomains(prev => {
+                            const base = prev.filter(d => !subNames.includes(d));
+                            return checked ? [...base, ...subNames] : base;
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary relative z-10 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className="font-bold text-foreground text-sm block truncate">{level1.name}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate max-w-sm mt-0.5">{level1.description}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {selectedCount > 0 && (
+                        <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
+                          {selectedCount}
+                        </span>
+                      )}
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                     </div>
                   </div>
 
-                  {/* Level 2 Sub-list */}
-                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-card/65">
-                    {subDomains.map((discipline) => {
-                      const isSelected = selectedDomains.includes(discipline.name);
-                      return (
-                        <button
-                          key={discipline.name}
-                          type="button"
-                          onClick={() => toggleDomain(discipline.name)}
-                          className={`p-3 text-left rounded-xl border transition-all flex items-start gap-2.5 relative ${
-                            isSelected
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border/60 hover:border-primary/50 text-muted-foreground hover:bg-muted/40'
-                          }`}
-                        >
-                          <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                            isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border'
-                          }`}>
-                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                  {/* Accordion Content (Dropdown collapse) */}
+                  {isExpanded && (
+                    <div className="p-4 border-t border-border/60 bg-muted/10 flex flex-col gap-3 animate-in slide-in-from-top duration-200">
+                      {/* Level 2 Sub-Domains */}
+                      {subDomains.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase">Disiplin Ilmu (Level 2)</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {subDomains.map((discipline) => {
+                              const isSelected = selectedDomains.includes(discipline.name);
+                              return (
+                                <button
+                                  key={discipline.name}
+                                  type="button"
+                                  onClick={() => toggleDomain(discipline.name)}
+                                  className={`p-2.5 text-left rounded-lg border text-xs transition-all flex items-start gap-2 relative ${isSelected
+                                      ? 'border-primary bg-primary/5 text-primary'
+                                      : 'border-border/60 hover:border-primary/50 text-muted-foreground hover:bg-muted/40'
+                                    }`}
+                                >
+                                  <div className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border'
+                                    }`}>
+                                    {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-bold text-foreground truncate">{discipline.name}</span>
+                                    <span className="text-[9px] text-muted-foreground mt-0.5 line-clamp-1">{discipline.description}</span>
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-foreground">{discipline.name}</span>
-                            <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{discipline.description}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Tidak ada sub-disiplin.</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Seksi 3: Tags / Subtopik Spesifik (Level 3) */}
-        {availableTags.length > 0 && (
-          <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-bold text-primary tracking-wider uppercase">3. Subtopik Spesifik & Tags (Level 3)</h2>
-            <p className="text-xs text-muted-foreground -mt-2">Pilih kata kunci atau tag khusus yang paling memicu rasa ingin tahu Anda.</p>
-            
-            <div className="bg-card border border-border p-5 rounded-2xl flex flex-wrap gap-2">
-              {availableTags.map((tag) => {
-                const isSelected = selectedDomains.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleDomain(tag)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                      isSelected
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    <span>#{tag}</span>
-                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Save Button */}
         <button
           type="submit"
           disabled={saving}
-          className="w-full py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-md hover:bg-primary/95 transition-all flex items-center justify-center gap-2 text-sm disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
+          className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md hover:bg-primary/95 transition-all flex items-center justify-center gap-2 text-sm disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
         >
           {saving ? (
             <>

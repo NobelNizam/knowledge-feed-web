@@ -10,6 +10,7 @@ import Link from 'next/link';
 export default function Profile() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const [showAllTopics, setShowAllTopics] = useState(false);
   
   // Protect route
   useEffect(() => {
@@ -55,22 +56,28 @@ export default function Profile() {
           </Link>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-border grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Topik Disukai</p>
-            <div className="flex flex-wrap gap-2">
-              {user.preferences?.domains?.map((domain: string) => (
-                <span key={domain} className="capitalize text-xs px-2 py-1 bg-primary/10 text-primary rounded-md font-medium">
-                  {domain}
-                </span>
-              )) || <span className="text-sm text-muted-foreground">Belum ada</span>}
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Tingkat Bacaan</p>
-            <p className="capitalize font-bold text-foreground">
-              {user.preferences?.readingLevel || 'Menengah'}
-            </p>
+        <div className="mt-6 pt-6 border-t border-border">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Topik Disukai</p>
+          <div className="flex flex-wrap gap-2 items-center">
+            {user.preferences?.domains && user.preferences.domains.length > 0 ? (
+              <>
+                {user.preferences.domains.slice(0, 5).map((domain: string) => (
+                  <span key={domain} className="capitalize text-xs px-2 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
+                    {domain}
+                  </span>
+                ))}
+                {user.preferences.domains.length > 5 && (
+                  <button
+                    onClick={() => setShowAllTopics(true)}
+                    className="text-xs px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-md font-bold transition-all duration-200"
+                  >
+                    + {user.preferences.domains.length - 5} Lainnya
+                  </button>
+                )}
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">Belum ada topik disukai</span>
+            )}
           </div>
         </div>
       </div>
@@ -103,6 +110,42 @@ export default function Profile() {
           </div>
         )}
       </div>
+      {/* Pop-up Modal Detail Topik Disukai (YAGNI/Ponytail Glassmorphism) */}
+      {showAllTopics && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="w-full max-w-sm mx-4 bg-background/80 backdrop-blur-lg border border-border/85 p-6 rounded-2xl shadow-xl flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+          >
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-foreground text-sm">Topik yang Disukai</h3>
+              <button 
+                onClick={() => setShowAllTopics(false)} 
+                className="text-muted-foreground hover:text-foreground text-sm font-semibold p-1 hover:bg-muted rounded-full w-6 h-6 flex items-center justify-center transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground">Berikut adalah daftar lengkap topik rumpun ilmu dan disiplin akademik yang Anda ikuti:</p>
+            
+            <div className="flex flex-wrap gap-2 max-h-52 overflow-y-auto p-1 scrollbar-thin">
+              {user.preferences?.domains?.map((domain: string) => (
+                <span key={domain} className="capitalize text-xs px-2.5 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
+                  {domain}
+                </span>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowAllTopics(false)}
+              className="mt-2 w-full py-2.5 bg-muted hover:bg-muted/80 text-foreground text-xs font-bold rounded-xl transition-all"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
