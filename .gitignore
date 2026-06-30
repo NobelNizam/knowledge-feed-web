@@ -16,3 +16,7 @@ web/.env*.local
 # Build files
 *.tsbuildinfo
 
+# Agents and Security Reviews
+.agents/
+SECUTIY_REVIEW.md
+SECURITY_REVIEW.md
