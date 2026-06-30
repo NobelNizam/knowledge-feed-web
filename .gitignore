@@ -20,3 +20,5 @@ web/.env*.local
 .agents/
 SECUTIY_REVIEW.md
 SECURITY_REVIEW.md
+AUDIT.md
+

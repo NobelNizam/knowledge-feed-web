@@ -28,10 +28,25 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
   const [pullProgress, setPullProgress] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
 
+  // SSE Pipeline Generation States
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStep, setGenerationStep] = useState('');
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [estimatedSecondsLeft, setEstimatedSecondsLeft] = useState(0);
+
   const limit = 10;
   const touchStartRef = useRef(0);
   const prevPreferencesRef = useRef<string>('');
-
+  // Effect for estimated time countdown
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGenerating && estimatedSecondsLeft > 0) {
+      interval = setInterval(() => {
+        setEstimatedSecondsLeft(prev => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isGenerating, estimatedSecondsLeft]);
   // Extract current feed state
   const currentFeed = feeds[currentDomainKey] || {
     cards: [],
@@ -236,52 +251,133 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
     }
   }, [currentDomainKey, user, isInitialized, isRestoring]);
 
-  // Pull to refresh trigger
+  // Pull to refresh trigger (SSE-based)
   const handleRefresh = useCallback(async () => {
+    if (isRefreshing || isGenerating) return;
+    
     setIsRefreshing(true);
     setError(null);
+    setGenerationStep('');
+    setGenerationProgress(0);
+    setEstimatedSecondsLeft(0);
+    
     const domainKey = currentDomainKey;
     const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
     
+    const sseUrl = feedAPI.getRefreshSSEUrl(
+      activeFilter.type, 
+      activeFilter.value, 
+      targetFeed.seenIds
+    );
+
+    console.log("[useFeedState] Opening EventSource connection to:", sseUrl);
+    
+    let eventSource: EventSource;
     try {
-      const res = await feedAPI.refreshFeed(activeFilter.type, activeFilter.value);
-      if (res.success && res.data && res.data.length > 0) {
-        const newCards = res.data;
-        const newIds = newCards.map((c: any) => c.id);
-        
-        setFeeds(prev => {
-          const existingIds = new Set(targetFeed.cards.map(c => c.id));
-          const filteredNewCards = newCards.filter((c: any) => !existingIds.has(c.id));
-          const updatedCards = [...filteredNewCards, ...targetFeed.cards];
-          const updatedSeenIds = [...newIds, ...targetFeed.seenIds];
-          
-          const updatedFeed = {
-            ...targetFeed,
-            cards: updatedCards,
-            seenIds: updatedSeenIds,
-            scrollPosition: 0
-          };
-          
-          const updated = {
-            ...prev,
-            [domainKey]: updatedFeed
-          };
-          
-          sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
-          sessionStorage.setItem(`scroll_pos_${domainKey}`, '0');
-          return updated;
-        });
-        
-        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
-      }
+      eventSource = new EventSource(sseUrl, { withCredentials: true });
     } catch (e: any) {
-      console.error("Refresh failed:", e);
-      setError("Gagal memperbarui feed: " + (e.message || ""));
-    } finally {
+      console.error("[useFeedState] EventSource failed to initialize:", e);
+      setError("Gagal inisialisasi koneksi EventSource: " + (e.message || ""));
       setIsRefreshing(false);
-      setPullProgress(0);
+      return;
     }
-  }, [currentDomainKey, activeFilter, feeds]);
+
+    eventSource.addEventListener('start', (e: any) => {
+      console.log("[useFeedState] SSE event: start");
+      try {
+        const data = JSON.parse(e.data);
+        setIsGenerating(true);
+        setEstimatedSecondsLeft(data.estimatedSeconds || 20);
+        setGenerationProgress(5);
+        setGenerationStep('initialize');
+      } catch (err) {
+        console.error("[useFeedState] Failed to parse start data:", err);
+      }
+    });
+
+    eventSource.addEventListener('progress', (e: any) => {
+      console.log("[useFeedState] SSE event: progress", e.data);
+      try {
+        const data = JSON.parse(e.data);
+        setGenerationStep(data.step || '');
+        setGenerationProgress(data.progress || 0);
+        setEstimatedSecondsLeft(data.estimatedSeconds || 0);
+      } catch (err) {
+        console.error("[useFeedState] Failed to parse progress data:", err);
+      }
+    });
+
+    eventSource.addEventListener('complete', (e: any) => {
+      console.log("[useFeedState] SSE event: complete");
+      try {
+        const data = JSON.parse(e.data);
+        const newCards = data.cards || [];
+        
+        if (newCards.length > 0) {
+          const newIds = newCards.map((c: any) => c.id);
+          
+          setFeeds(prev => {
+            const existingIds = new Set(targetFeed.cards.map(c => c.id));
+            const filteredNewCards = newCards.filter((c: any) => !existingIds.has(c.id));
+            const updatedCards = [...filteredNewCards, ...targetFeed.cards];
+            const updatedSeenIds = [...newIds, ...targetFeed.seenIds];
+            
+            const updatedFeed = {
+              ...targetFeed,
+              cards: updatedCards,
+              seenIds: updatedSeenIds,
+              scrollPosition: 0
+            };
+            
+            const updated = {
+              ...prev,
+              [domainKey]: updatedFeed
+            };
+            
+            sessionStorage.setItem('feed_tab_states', JSON.stringify(updated));
+            sessionStorage.setItem(`scroll_pos_${domainKey}`, '0');
+            return updated;
+          });
+
+          // Auto-scroll ke atas
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }, 100);
+        }
+      } catch (err) {
+        console.error("[useFeedState] Failed to process complete event:", err);
+      } finally {
+        eventSource.close();
+        setIsRefreshing(false);
+        setIsGenerating(false);
+        setGenerationStep('');
+        setGenerationProgress(0);
+        setEstimatedSecondsLeft(0);
+      }
+    });
+
+    eventSource.addEventListener('error', (e: any) => {
+      console.error("[useFeedState] SSE event: error", e);
+      let errMsg = "Koneksi ke AI Pipeline terputus.";
+      if (e.data) {
+        try {
+          const parsed = JSON.parse(e.data);
+          errMsg = parsed.message || errMsg;
+        } catch (err) {}
+      }
+      
+      setError(errMsg);
+      eventSource.close();
+      setIsRefreshing(false);
+      setIsGenerating(false);
+      setGenerationStep('');
+      setGenerationProgress(0);
+      setEstimatedSecondsLeft(0);
+    });
+
+  }, [currentDomainKey, activeFilter, feeds, isRefreshing, isGenerating]);
 
   // Touch Handlers for mobile pull-to-refresh
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -303,13 +399,13 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
   }, []);
 
   const onTouchEnd = useCallback(() => {
-    if (pullProgress > 0.6 && !isRefreshing && !loading) {
+    if (pullProgress > 0.6 && !isRefreshing && !isGenerating && !loading) {
       handleRefresh();
     } else {
       setPullProgress(0);
     }
     touchStartRef.current = 0;
-  }, [pullProgress, isRefreshing, loading, handleRefresh]);
+  }, [pullProgress, isRefreshing, isGenerating, loading, handleRefresh]);
 
   const loadMore = useCallback(() => {
     loadFeed(offset + limit);
@@ -324,6 +420,10 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
     isRefreshing,
     pullProgress,
     isRestoring,
+    isGenerating,
+    generationStep,
+    generationProgress,
+    estimatedSecondsLeft,
     loadMore,
     handleRefresh,
     setError,

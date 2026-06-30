@@ -5,7 +5,7 @@
  * terhadap sumber terpercaya (CrossRef, PubMed, arXiv).
  */
 
-const axios = require('axios');
+const { fetchPapers } = require('./crawler');
 
 const prisma = require('../lib/prisma');
 
@@ -18,19 +18,29 @@ const MIN_CONFIDENCE = parseFloat(process.env.FACT_CHECK_MIN_CONFIDENCE) || 0.6;
  */
 async function searchCrossRef(query) {
   try {
-    const response = await axios.get('https://api.crossref.org/works', {
-      params: {
-        query,
-        rows: 5,
-        select: 'DOI,title,author,URL,published-print,abstract',
-      },
-      timeout: 15000,
+    const url = new URL('https://api.crossref.org/works');
+    url.searchParams.append('query', query);
+    url.searchParams.append('rows', '5');
+    url.searchParams.append('select', 'DOI,title,author,URL,published-print,abstract');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // ponytail: timeout 15s
+
+    const response = await fetch(url.toString(), {
       headers: {
         'User-Agent': 'KnowledgeFeedPlatform/1.0 (mailto:noreply@knowledgefeed.app)',
       },
+      signal: controller.signal
     });
 
-    const items = response.data?.message?.items || [];
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const items = data?.message?.items || [];
     return items.map(item => ({
       sourceType: 'crossref',
       doi: item.DOI,
@@ -45,21 +55,44 @@ async function searchCrossRef(query) {
   }
 }
 
-// Helper to perform GET request with retry on 429 (Rate Limit)
-async function getWithRetry(url, config, retries = 3, delay = 1000) {
+// Helper to perform GET request with retry on 429 (Rate Limit) using native fetch
+async function getWithRetry(url, params = {}, retries = 3, delay = 1000) {
+  const urlObj = new URL(url);
+  for (const [key, val] of Object.entries(params)) {
+    urlObj.searchParams.append(key, String(val));
+  }
+
   for (let i = 0; i < retries; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // ponytail: timeout 15s
+
     try {
-      return await axios.get(url, config);
-    } catch (error) {
-      const isRateLimit = error.response && error.response.status === 429;
-      const isLastAttempt = i === retries - 1;
-      if (isRateLimit && !isLastAttempt) {
+      const response = await fetch(urlObj.toString(), {
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 429 && i < retries - 1) {
         console.warn(`[FactChecker] Rate limit 429 hit. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2; // Exponential backoff
         continue;
       }
-      throw error;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const isLastAttempt = i === retries - 1;
+      if (isLastAttempt) throw error;
+      
+      console.warn(`[FactChecker] Request failed: ${error.message}. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
     }
   }
 }
@@ -74,7 +107,7 @@ async function searchPubMed(query) {
     const searchParams = {
       db: 'pubmed',
       term: query,
-      retmax: 5,
+      retmax: '5',
       retmode: 'json',
     };
     if (process.env.NCBI_API_KEY) {
@@ -82,12 +115,12 @@ async function searchPubMed(query) {
     }
 
     // Step 1: Search for IDs
-    const searchResponse = await getWithRetry('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi', {
-      params: searchParams,
-      timeout: 15000,
-    });
+    const searchData = await getWithRetry(
+      'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
+      searchParams
+    );
 
-    const ids = searchResponse.data?.esearchresult?.idlist || [];
+    const ids = searchData?.esearchresult?.idlist || [];
     if (ids.length === 0) return [];
 
     const detailParams = {
@@ -100,12 +133,12 @@ async function searchPubMed(query) {
     }
 
     // Step 2: Fetch details
-    const detailResponse = await getWithRetry('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi', {
-      params: detailParams,
-      timeout: 15000,
-    });
+    const detailData = await getWithRetry(
+      'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi',
+      detailParams
+    );
 
-    const results = detailResponse.data?.result || {};
+    const results = detailData?.result || {};
     return ids
       .filter(id => results[id])
       .map(id => {
@@ -132,7 +165,6 @@ async function searchPubMed(query) {
  */
 async function searchArxiv(query) {
   try {
-    const { fetchPapers } = require('./crawler');
     const papers = await fetchPapers({ query, maxResults: 5 });
     return papers.map(p => ({
       sourceType: 'arxiv',

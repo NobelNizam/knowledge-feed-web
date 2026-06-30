@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const authMiddleware = require('../middleware/auth');
+const prisma = require('../lib/prisma');
 
-const prisma = new PrismaClient();
 
 // Protect all user routes
 router.use(authMiddleware);
@@ -12,7 +11,17 @@ router.use(authMiddleware);
 router.put('/preferences', async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { domains, readingLevel } = req.body;
+    const { domains, readingLevel = 'intermediate' } = req.body;
+
+    // ponytail: validasi input minimal
+    if (!domains || !Array.isArray(domains)) {
+      return res.status(400).json({ error: 'Domains must be a valid array' });
+    }
+
+    const validReadingLevels = ['beginner', 'intermediate', 'advanced'];
+    if (!validReadingLevels.includes(readingLevel)) {
+      return res.status(400).json({ error: 'Invalid reading level' });
+    }
 
     const preferences = await prisma.userPreferences.upsert({
       where: { userId },

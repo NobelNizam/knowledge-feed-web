@@ -1,0 +1,14 @@
+
+> knowledge-feed-web@1.0.0 dev
+> nodemon --watch next.config.js --watch .env.local --exec "next dev"
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): next.config.js .env.local[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `next dev`[39m
+   ▲ Next.js 14.0.4
+   - Local:        http://localhost:3000
+   - Environments: .env.local
+
+ ✓ Ready in 2.5s

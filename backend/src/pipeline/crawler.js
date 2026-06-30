@@ -5,7 +5,6 @@
  * Rate limited: 1 request per 3 detik (sesuai arXiv policy).
  */
 
-const axios = require('axios');
 const xml2js = require('xml2js');
 
 const ARXIV_API_URL = 'https://export.arxiv.org/api/query';
@@ -97,23 +96,35 @@ async function fetchPapers({ query, maxResults = 10, start = 0, sortBy = 'submit
   try {
     console.log(`[Crawler] Fetching arXiv papers for query: "${query}" (max: ${maxResults})`);
     
-    // Optimasi: Kurangi timeout menjadi 5000ms agar tidak blocking terlalu lama
-    // saat ArXiv down atau rate limit (bisa fallback ke direct gen).
-    const response = await axios.get(ARXIV_API_URL, {
-      params: {
-        search_query: `all:${query}`,
-        start: 0,
-        max_results: maxResults,
-        sortBy: 'submittedDate',
-        sortOrder: 'descending'
-      },
-      timeout: 15000 // 15 seconds to handle slower arXiv responses safely
-    });const papers = await parseArxivResponse(response.data);
+    const url = new URL(ARXIV_API_URL);
+    url.searchParams.append('search_query', `all:${query}`);
+    url.searchParams.append('start', '0');
+    url.searchParams.append('max_results', String(maxResults));
+    url.searchParams.append('sortBy', 'submittedDate');
+    url.searchParams.append('sortOrder', 'descending');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // ponytail: timeout 5s untuk arXiv
+
+    const response = await fetch(url.toString(), {
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const xmlData = await response.text();
+    const papers = await parseArxivResponse(xmlData);
     console.log(`[Crawler] Fetched ${papers.length} papers from arXiv`);
     return papers;
   } catch (error) {
-    console.error('[Crawler] Error fetching from arXiv:', error.message);
-    throw new Error(`arXiv fetch failed: ${error.message}`);
+    const isTimeout = error.name === 'AbortError';
+    const errMsg = isTimeout ? 'Request timed out after 5s' : error.message;
+    console.error('[Crawler] Error fetching from arXiv:', errMsg);
+    throw new Error(`arXiv fetch failed: ${errMsg}`);
   }
 }
 

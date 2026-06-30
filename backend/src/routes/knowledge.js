@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../lib/jwtSecrets');
+const authMiddleware = require('../middleware/auth');
 
 const prisma = require('../lib/prisma');
 
@@ -128,21 +129,12 @@ router.get('/:id', async (req, res) => {
       where: { cardId: id }
     });
 
-    // Hitung saveCount secara dinamis dari relasi (Ponytail/YAGNI)
-    const saveCount = await prisma.user.count({
-      where: {
-        savedCards: {
-          some: { id }
-        }
-      }
-    });
-
     const responseData = {
       ...card,
       likeCount,
       liked,
       saved,
-      saveCount,
+      saveCount: card.saveCount || 0, // ponytail: menggunakan kolom denormalisasi
       commentsCount
     };
 
@@ -152,8 +144,6 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch card' });
   }
 });
-
-const authMiddleware = require('../middleware/auth');
 
 // Helper untuk menghitung dan memperbarui engagement score
 async function updateEngagementScore(cardId) {

@@ -22,6 +22,8 @@ const { publishCard, updateJobStatus, invalidateFeedCache } = require('../../pip
 
 const prisma = require('../../lib/prisma');
 
+const activeCallbacks = new Map();
+
 /**
  * Update progress pada database PipelineJob
  */
@@ -34,15 +36,28 @@ async function updateProgress(pipelineJobId, step, progress, details = null) {
     status: 'processing',
     ...(details ? { output: details } : {}),
   });
+
+  const cb = activeCallbacks.get(pipelineJobId);
+  if (cb) {
+    try {
+      cb(step, progress, details);
+    } catch (err) {
+      console.error(`[PipelineWorker] Error in onProgress callback for job ${pipelineJobId}:`, err.message);
+    }
+  }
 }
 
 /**
  * Main pipeline execution function
  * @param {Object} jobData - Job data dari queue
+ * @param {Function} [onProgress] - Optional progress callback for SSE
  * @returns {Promise<Object>} Pipeline result
  */
-async function executePipeline(jobData) {
+async function executePipeline(jobData, onProgress = null) {
   const { topics, count = 5, pipelineJobId, subtopicMap = null } = jobData;
+  if (pipelineJobId && onProgress) {
+    activeCallbacks.set(pipelineJobId, onProgress);
+  }
   const pipelineTopics = topics && topics.length > 0 ? topics : getDefaultTopics();
 
   console.log(`[Pipeline] Starting pipeline for topics: ${pipelineTopics.join(', ')} (count: ${count})`);
@@ -286,6 +301,10 @@ async function executePipeline(jobData) {
     }
 
     throw error;
+  } finally {
+    if (pipelineJobId) {
+      activeCallbacks.delete(pipelineJobId);
+    }
   }
 }
 

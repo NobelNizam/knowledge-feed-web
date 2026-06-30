@@ -20,17 +20,24 @@ app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    // Izinkan localhost dan IP lokal (192.168.x.x) di mode development
-    if (
-      process.env.NODE_ENV === 'development' || 
-      origin.startsWith('http://localhost') || 
-      origin.startsWith('http://192.168.') ||
-      origin.startsWith('http://127.0.0.1')
-    ) {
-      return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
+
+    // Tambahkan IP lokal untuk development
+    if (process.env.NODE_ENV !== 'production') {
+      const localIPs = Array.from({ length: 14 }, (_, i) => `http://192.168.1.${i + 2}:3000`);
+      allowedOrigins.push(...localIPs);
     }
-    const allowed = process.env.FRONTEND_URL || 'http://localhost:3000';
-    if (origin === allowed) {
+
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.endsWith('.trycloudflare.com') ||
+                      (process.env.NODE_ENV !== 'production' && origin.includes('localhost'));
+
+    if (isAllowed) {
       return callback(null, true);
     }
     callback(new Error('Not allowed by CORS'));

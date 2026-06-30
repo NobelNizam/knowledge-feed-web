@@ -16,13 +16,16 @@ const authLimiter = rateLimit({
 
 const crypto = require('crypto');
 
-const setTokenCookie = (res, token, isRefresh = false) => {
+const setTokenCookie = (req, res, token, isRefresh = false) => {
   const maxAge = isRefresh ? 7 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
   const cookieName = isRefresh ? 'refreshToken' : 'token';
+  const isSecure = process.env.NODE_ENV === 'production' || 
+                   req.secure || 
+                   req.headers['x-forwarded-proto'] === 'https';
   res.cookie(cookieName, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isSecure,
+    sameSite: isSecure ? 'none' : 'lax',
     maxAge
   });
 };
@@ -56,6 +59,12 @@ router.post('/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
+    // ponytail: validasi format email sederhana
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters long' });
     }
@@ -86,8 +95,8 @@ router.post('/register', authLimiter, async (req, res) => {
     });
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
-    setTokenCookie(res, accessToken, false);
-    setTokenCookie(res, refreshToken, true);
+    setTokenCookie(req, res, accessToken, false);
+    setTokenCookie(req, res, refreshToken, true);
     
     res.status(201).json({ success: true, user });
   } catch (error) {
@@ -104,6 +113,11 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
     const user = await prisma.user.findUnique({ 
       where: { email },
       include: { preferences: true }
@@ -118,8 +132,8 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
-    setTokenCookie(res, accessToken, false);
-    setTokenCookie(res, refreshToken, true);
+    setTokenCookie(req, res, accessToken, false);
+    setTokenCookie(req, res, refreshToken, true);
     
     // Dynamic fallback for user preferences if it is null
     let userPreferences = user.preferences;
@@ -163,7 +177,21 @@ router.post('/logout', async (req, res) => {
 router.post('/refresh', async (req, res) => {
   const { refreshToken } = req.cookies;
   
+  const clearCookies = () => {
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+  };
+
   if (!refreshToken) {
+    clearCookies();
     return res.status(401).json({ error: 'Refresh token not found' });
   }
 
@@ -172,20 +200,23 @@ router.post('/refresh', async (req, res) => {
     const session = await prisma.session.findUnique({ where: { refreshToken } });
     
     if (!session) {
+      clearCookies();
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
     
     if (session.expiresAt < new Date()) {
-      await prisma.session.delete({ where: { id: session.id } });
+      await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+      clearCookies();
       return res.status(401).json({ error: 'Refresh token expired' });
     }
 
     // Generate new access token
     const accessToken = jwt.sign({ userId: decoded.userId, role: decoded.role }, JWT_SECRET, { expiresIn: '15m' });
-    setTokenCookie(res, accessToken, false);
+    setTokenCookie(req, res, accessToken, false);
     
     res.json({ success: true });
   } catch (error) {
+    clearCookies();
     res.status(401).json({ error: 'Invalid refresh token' });
   }
 });

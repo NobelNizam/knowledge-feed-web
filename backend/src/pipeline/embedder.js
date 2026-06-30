@@ -6,37 +6,40 @@
  * non-standard (input_type) yang tidak kompatibel dengan OpenAI SDK.
  */
 
-const axios = require('axios');
+
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_API_BASE_URL = process.env.NVIDIA_API_BASE_URL || 'https://integrate.api.nvidia.com/v1';
 const EMBED_MODEL = process.env.NVIDIA_EMBED_MODEL || 'nvidia/nv-embedqa-e5-v5';
 const MAX_BATCH_SIZE = 16; // NVIDIA NIM batch limit
 
-/**
- * Direct NVIDIA NIM embedding API call
- * @param {string|string[]} input - Text or array of texts
- * @param {string} inputType - 'query' or 'passage'
- * @returns {Promise<Object>} API response
- */
 async function callEmbeddingAPI(input, inputType) {
-  const response = await axios.post(
-    `${NVIDIA_API_BASE_URL}/embeddings`,
-    {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // ponytail: timeout 60s
+
+  const response = await fetch(`${NVIDIA_API_BASE_URL}/embeddings`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       model: EMBED_MODEL,
       input: Array.isArray(input) ? input : [input],
       input_type: inputType,
       encoding_format: 'float',
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 60000,
-    }
-  );
-  return response.data;
+    }),
+    signal: controller.signal
+  });
+
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`HTTP error! status: ${response.status} ${errText}`);
+  }
+
+  return await response.json();
 }
 
 /**

@@ -38,11 +38,6 @@ function getRedisConnection() {
 // Queue definitions
 const QUEUE_NAMES = {
   CONTENT_PIPELINE: 'content-pipeline',
-  CRAWL: 'crawl',
-  EMBED: 'embed',
-  GENERATE: 'generate',
-  FACT_CHECK: 'fact-check',
-  MODERATE: 'moderate',
 };
 
 // Queue instances cache

@@ -1,6 +1,6 @@
 const { getRedisConnection } = require('../queue/queueManager');
 
-const CACHE_TTL = 300; // 5 menit
+const CACHE_TTL = 900; // 15 menit (ponytail: dioptimalkan)
 
 /**
  * Mendapatkan cache key untuk domain feed tertentu
@@ -83,49 +83,7 @@ async function invalidateAllDomainCaches() {
   return false;
 }
 
-/**
- * Mendapatkan cache key untuk feed pengguna (Legacy)
- */
-function getFeedCacheKey(userId, queryParams) {
-  const queryStr = JSON.stringify(queryParams);
-  return `feed:user:${userId || 'anonymous'}:${queryStr}`;
-}
 
-/**
- * Mendapatkan feed dari cache (Legacy)
- */
-async function getCachedFeed(userId, queryParams) {
-  const redis = getRedisConnection();
-  if (!redis) return null;
-
-  try {
-    const key = getFeedCacheKey(userId, queryParams);
-    const cachedData = await redis.get(key);
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-  } catch (err) {
-    console.error('[CacheService] Error getting feed from cache:', err.message);
-  }
-  return null;
-}
-
-/**
- * Menyimpan feed ke cache (Legacy)
- */
-async function cacheFeed(userId, queryParams, data) {
-  const redis = getRedisConnection();
-  if (!redis) return false;
-
-  try {
-    const key = getFeedCacheKey(userId, queryParams);
-    await redis.set(key, JSON.stringify(data), 'EX', CACHE_TTL);
-    return true;
-  } catch (err) {
-    console.error('[CacheService] Error saving feed to cache:', err.message);
-  }
-  return false;
-}
 
 /**
  * Menghapus cache (invalidasi) untuk seorang user (Legacy)
@@ -174,8 +132,6 @@ module.exports = {
   setDomainCache,
   invalidateDomainCache,
   invalidateAllDomainCaches,
-  getCachedFeed,
-  cacheFeed,
   invalidateUserCache,
   invalidateAllFeedCache,
 };

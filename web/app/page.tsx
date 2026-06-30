@@ -36,6 +36,10 @@ export default function Home() {
     isRefreshing,
     pullProgress,
     isRestoring,
+    isGenerating,
+    generationStep,
+    generationProgress,
+    estimatedSecondsLeft,
     loadMore,
     handleRefresh,
     touchHandlers
@@ -131,11 +135,11 @@ export default function Home() {
           <div className="flex items-center gap-1">
             <button 
               onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+              disabled={isRefreshing || isGenerating}
+              className="p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Refresh Feed"
             >
-              <RefreshCw className={cn("w-5 h-5", isRefreshing && "animate-spin")} />
+              <RefreshCw className={cn("w-5 h-5", (isRefreshing || isGenerating) && "animate-spin")} />
             </button>
             
             <button
@@ -210,9 +214,10 @@ export default function Home() {
             </p>
             <button 
               onClick={handleRefresh}
-              className="mt-6 px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all"
+              disabled={isRefreshing || isGenerating}
+              className="mt-6 px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Segarkan Feed
+              {isRefreshing || isGenerating ? 'Sedang Memproses...' : 'Segarkan Feed'}
             </button>
           </div>
         ) : (
@@ -225,8 +230,8 @@ export default function Home() {
               <div className="flex justify-center p-8">
                 <button
                   onClick={loadMore}
-                  disabled={loadingMore}
-                  className="px-6 py-2.5 rounded-full border border-border bg-card text-foreground font-medium hover:bg-muted transition-colors flex items-center gap-2"
+                  disabled={loadingMore || isGenerating}
+                  className="px-6 py-2.5 rounded-full border border-border bg-card text-foreground font-medium hover:bg-muted transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {loadingMore ? (
                     <><RefreshCw className="w-4 h-4 animate-spin" /> Memuat...</>
@@ -248,6 +253,81 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Glassmorphism AI Pipeline Generation Loading Overlay */}
+      {isGenerating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 backdrop-blur-md transition-all duration-300 animate-in fade-in">
+          <div className="bg-card/75 border border-border/80 p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 flex flex-col items-center relative overflow-hidden backdrop-blur-lg">
+            {/* Background decorative glow */}
+            <div className="absolute -right-16 -top-16 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -left-16 -bottom-16 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+            
+            {/* Spinner Icon */}
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 text-primary animate-pulse">
+              <RefreshCw className="w-8 h-8 animate-spin" />
+            </div>
+            
+            <span className="text-[10px] font-bold text-primary tracking-widest uppercase mb-1">AI Pipeline Processing</span>
+            <h3 className="text-xl font-extrabold text-foreground tracking-tight text-center mb-2">Menyiapkan Konten Pengetahuan</h3>
+            
+            {/* Step Description */}
+            <p className="text-sm text-muted-foreground text-center mb-6 min-h-[40px] px-2 leading-relaxed">
+              {getStepDescription(generationStep)}
+            </p>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-muted/60 h-2.5 rounded-full overflow-hidden mb-4 border border-border/20">
+              <div 
+                className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${generationProgress}%` }}
+              />
+            </div>
+            
+            <div className="flex justify-between w-full text-xs font-semibold text-muted-foreground px-1">
+              <span>Progres: {generationProgress}%</span>
+              {estimatedSecondsLeft > 0 ? (
+                <span className="text-foreground font-bold">~{estimatedSecondsLeft} detik sisa</span>
+              ) : (
+                <span className="text-foreground font-bold">Menyelesaikan...</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// Deskripsi langkah-langkah AI Pipeline untuk loading overlay
+function getStepDescription(step: string): string {
+  switch (step) {
+    case 'initialize':
+      return 'Menginisialisasi basis pengetahuan...';
+    case 'crawl':
+      return 'Mengunduh referensi jurnal ilmiah terpercaya dari arXiv...';
+    case 'clean':
+      return 'Membersihkan dan menyaring duplikasi dokumen...';
+    case 'save_sources':
+      return 'Menyimpan dokumen referensi ke database...';
+    case 'chunk':
+      return 'Memecah dokumen menjadi bagian-bagian kecil (chunking)...';
+    case 'embed':
+      return 'Membuat vektor embedding dari dokumen...';
+    case 'store_vectors':
+      return 'Menyimpan vektor dokumen ke Vector Store (PGVector)...';
+    case 'retrieve_generate':
+      return 'Melakukan RAG & merumuskan konten feed dengan AI...';
+    case 'fact_check':
+      return 'Memverifikasi kebenaran fakta klaim konten secara ilmiah...';
+    case 'moderate':
+      return 'Melakukan moderasi keamanan konten dan toksisitas...';
+    case 'publish':
+      return 'Menerbitkan kartu pengetahuan ke timeline Anda...';
+    case 'invalidate_cache':
+      return 'Menyinkronkan cache feed...';
+    case 'generate_fallback':
+      return 'Menyiapkan konten pengetahuan (mode cepat)...';
+    default:
+      return 'Menghubungkan ke AI pipeline...';
+  }
 }

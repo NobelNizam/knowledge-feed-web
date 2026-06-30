@@ -47,6 +47,7 @@ model KnowledgeCard {
   comments        Comment[]
   
   @@map("knowledge_cards")
+  @@index([moderationStatus])
 }
 
 enum Role {
