@@ -15,7 +15,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <FilterProvider>
-      <main className="flex flex-row justify-center max-w-7xl mx-auto w-full relative">
+      <main className="flex flex-row justify-between w-full relative">
         <LeftSidebar />
         
         <section className="flex min-h-screen flex-1 flex-col px-6 pb-10 pt-28 max-md:pb-24 sm:px-10 overflow-x-hidden">
