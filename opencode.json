@@ -8,5 +8,8 @@
                 "codebase-memory-mcp",
             ]
         }
-    }
+    },
+    "plugin": [
+        "@dietrichgebert/ponytail"
+    ]
 }
