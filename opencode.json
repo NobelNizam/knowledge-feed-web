@@ -7,6 +7,15 @@
             "command": [
                 "codebase-memory-mcp",
             ]
+        },
+        "playwright": {
+            "type": "local",
+            "enabled": true,
+            "command": [
+                "npx",
+                "@playwright/mcp@latest",
+                "--browser=firefox"
+            ]
         }
     },
     "plugin": [
