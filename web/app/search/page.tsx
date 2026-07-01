@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { knowledgeAPI } from '@/lib/api';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { Search as SearchIcon, RefreshCw, AlertCircle, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
+import type { CardData } from '@/lib/types';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -14,7 +15,7 @@ export default function SearchPage() {
   const [activeDomain, setActiveDomain] = useState<string | null>(null);
   const [availableDomains, setAvailableDomains] = useState<string[]>([]);
   
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -62,8 +63,8 @@ export default function SearchPage() {
         } else {
           setError(res.error || 'Gagal melakukan pencarian');
         }
-      } catch (err: any) {
-        setError(err.message || 'Terjadi kesalahan saat mencari');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mencari');
       } finally {
         setLoading(false);
       }

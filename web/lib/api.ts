@@ -1,7 +1,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface FetchOptions extends RequestInit {
-  params?: Record<string, any>;
+  params?: Record<string, string | number | boolean | undefined | null>;
 }
 
 async function request(path: string, options: FetchOptions = {}) {
@@ -40,17 +40,17 @@ async function request(path: string, options: FetchOptions = {}) {
 
 const api = {
   get: (path: string, options?: FetchOptions) => request(path, { ...options, method: 'GET' }),
-  post: (path: string, data?: any, options?: FetchOptions) => request(path, { ...options, method: 'POST', body: data ? JSON.stringify(data) : undefined }),
-  put: (path: string, data?: any, options?: FetchOptions) => request(path, { ...options, method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+  post: (path: string, data?: unknown, options?: FetchOptions) => request(path, { ...options, method: 'POST', body: data !== undefined ? JSON.stringify(data) : undefined }),
+  put: (path: string, data?: unknown, options?: FetchOptions) => request(path, { ...options, method: 'PUT', body: data !== undefined ? JSON.stringify(data) : undefined }),
   delete: (path: string, options?: FetchOptions) => request(path, { ...options, method: 'DELETE' }),
 };
 
 export const authAPI = {
-  register: async (data: any) => {
+  register: async (data: { name: string; email: string; password: string }) => {
     const response = await api.post('/auth/register', data);
     return response;
   },
-  login: async (data: any) => {
+  login: async (data: { email: string; password: string }) => {
     const response = await api.post('/auth/login', data);
     return response;
   },

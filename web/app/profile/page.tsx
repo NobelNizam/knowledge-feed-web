@@ -91,7 +91,7 @@ export default function Profile() {
 
         {user.savedCards && user.savedCards.length > 0 ? (
           <div className="flex flex-col w-full pb-8">
-            {user.savedCards.map((card: any, idx: number) => (
+            {user.savedCards.map((card, idx: number) => (
               <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
             ))}
           </div>

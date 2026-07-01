@@ -80,9 +80,9 @@ export default function ProfileSettings() {
       setTimeout(() => {
         router.push('/profile');
       }, 1000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.response?.data?.error || err.message || 'Terjadi kesalahan saat menyimpan pengaturan');
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat menyimpan pengaturan');
     } finally {
       setSaving(false);
     }

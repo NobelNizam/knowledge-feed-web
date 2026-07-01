@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { userAPI, interactionAPI } from '@/lib/api';
 import { getParentDomain } from '@/lib/domainMapping';
+import { updateCardInCache } from '@/lib/cache';
 
 export interface KnowledgeFeedCardProps {
   card: {
@@ -52,33 +53,6 @@ const DOMAIN_ICONS: Record<string, string> = {
   'Interdisciplinary Sciences': '🧬',
 };
 
-const updateCardInCache = (cardId: string, updates: any) => {
-  if (typeof window === 'undefined') return;
-  const savedStates = sessionStorage.getItem('feed_tab_states');
-  if (!savedStates) return;
-  try {
-    const parsed = JSON.parse(savedStates);
-    let changed = false;
-    for (const key of Object.keys(parsed)) {
-      const tabState = parsed[key];
-      if (tabState.cards) {
-        tabState.cards = tabState.cards.map((c: any) => {
-          if (c.id === cardId) {
-            changed = true;
-            return { ...c, ...updates };
-          }
-          return c;
-        });
-      }
-    }
-    if (changed) {
-      sessionStorage.setItem('feed_tab_states', JSON.stringify(parsed));
-    }
-  } catch (e) {
-    console.error('Failed to update cache:', e);
-  }
-};
-
 export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedCardProps) {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
@@ -98,7 +72,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   // Set initial saved state based on user context
   useEffect(() => {
     if (user && user.savedCards) {
-      setSaved(user.savedCards.some((c: any) => c.id === card.id));
+      setSaved(user.savedCards.some(c => c.id === card.id));
     } else {
       setSaved(card.saved || false);
     }

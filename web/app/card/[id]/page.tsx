@@ -6,42 +6,16 @@ import { knowledgeAPI, interactionAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { RefreshCw, ArrowLeft, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
-
-const updateCardInCache = (cardId: string, updates: any) => {
-  if (typeof window === 'undefined') return;
-  const savedStates = sessionStorage.getItem('feed_tab_states');
-  if (!savedStates) return;
-  try {
-    const parsed = JSON.parse(savedStates);
-    let changed = false;
-    for (const key of Object.keys(parsed)) {
-      const tabState = parsed[key];
-      if (tabState.cards) {
-        tabState.cards = tabState.cards.map((c: any) => {
-          if (c.id === cardId) {
-            changed = true;
-            return { ...c, ...updates };
-          }
-          return c;
-        });
-      }
-    }
-    if (changed) {
-      sessionStorage.setItem('feed_tab_states', JSON.stringify(parsed));
-    }
-  } catch (e) {
-    console.error('Failed to update cache:', e);
-  }
-};
+import { updateCardInCache } from '@/lib/cache';
+import type { CardData, CommentData } from '@/lib/types';
 
 export default function CardDetail({ params }: { params: { id: string } }) {
-  const [card, setCard] = useState<any>(null);
+  const [card, setCard] = useState<CardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<CommentData[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
-  const [replyingTo, setReplyingTo] = useState<any | null>(null);
+  const [replyingTo, setReplyingTo] = useState<CommentData | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
@@ -56,7 +30,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
           // Rekam view
           const viewRes = await interactionAPI.viewCard(params.id);
           if (viewRes.success && viewRes.viewCount !== undefined) {
-            setCard((prev: any) => prev ? { ...prev, viewCount: viewRes.viewCount } : null);
+            setCard(prev => prev ? { ...prev, viewCount: viewRes.viewCount } : null);
             
             // Sync dengan feed utama dan cache
             window.dispatchEvent(new CustomEvent('card-interaction', {
@@ -67,9 +41,9 @@ export default function CardDetail({ params }: { params: { id: string } }) {
         } else {
           setError(res.error || 'Failed to load card');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        setError(err.message || 'Failed to load card');
+        setError(err instanceof Error ? err.message : 'Failed to load card');
       } finally {
         setLoading(false);
       }
@@ -119,7 +93,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
         }
 
         // Increment comments count di card state
-        setCard((prev: any) => {
+        setCard(prev => {
           if (!prev) return null;
           return {
             ...prev,
@@ -260,7 +234,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                   {/* Reply Comments (Indented) */}
                   {comment.replies && comment.replies.length > 0 && (
                     <div className="mt-3 pl-8 flex flex-col gap-3 border-l-2 border-border ml-4">
-                      {comment.replies.map((reply: any) => (
+                      {comment.replies.map((reply: CommentData) => (
                         <div key={reply.id} className="flex items-start gap-2.5">
                           <div className="w-6 h-6 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-xs shrink-0 font-bold">
                             {(reply.user?.name || 'U').substring(0, 1).toUpperCase()}

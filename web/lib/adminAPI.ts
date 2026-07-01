@@ -11,7 +11,7 @@ export const adminAPI = {
     return response.data;
   },
 
-  updateFactCheckConfig: async (config: any) => {
+  updateFactCheckConfig: async (config: { enabled: boolean; sources: string[] }) => {
     const response = await api.post('/admin/config/fact-check', { config });
     return response.data;
   },

@@ -3,14 +3,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from './api';
 import { useRouter } from 'next/navigation';
+import type { UserPreferences, CardData } from './types';
 
-interface User {
+export interface User {
   id: string;
   name: string;
   email: string;
   role: 'USER' | 'ADMIN';
-  preferences?: any;
-  savedCards?: any[];
+  preferences?: UserPreferences;
+  savedCards?: CardData[];
   avatarUrl?: string;
 }
 

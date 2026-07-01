@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { feedAPI } from '@/lib/api';
 import { DOMAIN_LEVEL2_MAP } from '@/lib/domainMapping';
+import type { CardData } from '@/lib/types';
+import type { User } from '@/lib/AuthContext';
+import type { ActiveFilter } from '@/lib/FilterContext';
 
 export interface TabFeedState {
-  cards: any[];
+  cards: CardData[];
   seenIds: string[];
   offset: number;
   hasMore: boolean;
@@ -13,9 +16,9 @@ export interface TabFeedState {
 }
 
 interface UseFeedStateProps {
-  user: any;
+  user: User | null;
   isInitialized: boolean;
-  activeFilter: any;
+  activeFilter: ActiveFilter;
   currentDomainKey: string;
 }
 
@@ -79,7 +82,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
           );
 
           for (const tabState of Object.values(parsedStates)) {
-            if (tabState.cards && tabState.cards.some((card: any) => !allValidLevel2.has((card.domain || '').toLowerCase()))) {
+            if (tabState.cards && tabState.cards.some(card => !allValidLevel2.has((card.domain || '').toLowerCase()))) {
               isCacheStale = true;
               break;
             }
@@ -162,15 +165,15 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
     }
 
     try {
-      const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
+      const targetFeed: TabFeedState = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
       const querySeenIds = reset ? [] : targetFeed.seenIds;
       const filterDomains = filter.type !== 'all' ? filter.domains : undefined;
       
       const res = await feedAPI.getFeed(limit, newOffset, filterDomains, querySeenIds);
 
       if (res.success) {
-        const incomingCards = res.data || [];
-        const incomingIds = incomingCards.map((c: any) => c.id);
+        const incomingCards: CardData[] = res.data || [];
+        const incomingIds = incomingCards.map(c => c.id);
 
         setFeeds((prev) => {
           let updatedFeed: TabFeedState;
@@ -184,7 +187,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
             };
           } else {
             const existingIds = new Set(targetFeed.cards.map(c => c.id));
-            const newCards = incomingCards.filter((c: any) => !existingIds.has(c.id));
+            const newCards = incomingCards.filter(c => !existingIds.has(c.id));
             const updatedCards = [...targetFeed.cards, ...newCards];
             const updatedSeenIds = [...targetFeed.seenIds, ...incomingIds];
             
@@ -208,9 +211,9 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
       } else {
         setError(res.error || "Failed to load feed");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "An unexpected error occurred");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -262,7 +265,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
     setEstimatedSecondsLeft(0);
     
     const domainKey = currentDomainKey;
-    const targetFeed = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
+    const targetFeed: TabFeedState = feeds[domainKey] || { cards: [], seenIds: [], offset: 0, hasMore: true, scrollPosition: 0 };
     
     const sseUrl = feedAPI.getRefreshSSEUrl(
       activeFilter.type, 
@@ -275,14 +278,14 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
     let eventSource: EventSource;
     try {
       eventSource = new EventSource(sseUrl, { withCredentials: true });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("[useFeedState] EventSource failed to initialize:", e);
-      setError("Gagal inisialisasi koneksi EventSource: " + (e.message || ""));
+      setError("Gagal inisialisasi koneksi EventSource: " + (e instanceof Error ? e.message : ""));
       setIsRefreshing(false);
       return;
     }
 
-    eventSource.addEventListener('start', (e: any) => {
+    eventSource.addEventListener('start', (e: MessageEvent) => {
       console.log("[useFeedState] SSE event: start");
       try {
         const data = JSON.parse(e.data);
@@ -295,7 +298,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
       }
     });
 
-    eventSource.addEventListener('progress', (e: any) => {
+    eventSource.addEventListener('progress', (e: MessageEvent) => {
       console.log("[useFeedState] SSE event: progress", e.data);
       try {
         const data = JSON.parse(e.data);
@@ -307,18 +310,18 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
       }
     });
 
-    eventSource.addEventListener('complete', (e: any) => {
+    eventSource.addEventListener('complete', (e: MessageEvent) => {
       console.log("[useFeedState] SSE event: complete");
       try {
         const data = JSON.parse(e.data);
-        const newCards = data.cards || [];
+        const newCards: CardData[] = data.cards || [];
         
         if (newCards.length > 0) {
-          const newIds = newCards.map((c: any) => c.id);
+          const newIds = newCards.map(c => c.id);
           
           setFeeds(prev => {
             const existingIds = new Set(targetFeed.cards.map(c => c.id));
-            const filteredNewCards = newCards.filter((c: any) => !existingIds.has(c.id));
+            const filteredNewCards = newCards.filter(c => !existingIds.has(c.id));
             const updatedCards = [...filteredNewCards, ...targetFeed.cards];
             const updatedSeenIds = [...newIds, ...targetFeed.seenIds];
             
@@ -358,7 +361,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
       }
     });
 
-    eventSource.addEventListener('error', (e: any) => {
+    eventSource.addEventListener('error', (e: MessageEvent) => {
       console.error("[useFeedState] SSE event: error", e);
       let errMsg = "Koneksi ke AI Pipeline terputus.";
       if (e.data) {
