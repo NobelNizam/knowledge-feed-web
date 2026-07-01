@@ -21,3 +21,10 @@ SECUTIY_REVIEW.md
 SECURITY_REVIEW.md
 AUDIT.md
 
+# Project-specific ignored files
+skills-lock.json
+opencode.json
+.github/
+backend.log
+dev-server.log
+*.log
