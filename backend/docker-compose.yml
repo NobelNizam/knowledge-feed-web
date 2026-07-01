@@ -5,9 +5,9 @@ services:
     image: pgvector/pgvector:pg14
     container_name: knowledge-feed-db
     environment:
-      POSTGRES_USER: knowledge
-      POSTGRES_PASSWORD: knowledge123
-      POSTGRES_DB: knowledge_feed
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
     ports:
       - "5432:5432"
     volumes:
@@ -18,7 +18,7 @@ services:
     image: redis:7-alpine
     container_name: knowledge-feed-redis
     ports:
-      - "6379:6379"
+      - ${REDIS_PORTS}
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -28,8 +28,8 @@ services:
     image: minio/minio
     container_name: knowledge-feed-minio
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASS}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -44,8 +44,8 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgresql://knowledge:knowledge123@postgres:5432/knowledge_feed
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
       - NODE_ENV=production
     depends_on:
       - postgres
@@ -57,10 +57,9 @@ services:
     container_name: knowledge-feed-worker
     command: node src/workers/contentGenerator.js
     environment:
-      - DATABASE_URL=postgresql://knowledge:knowledge123@postgres:5432/knowledge_feed
+      - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=production
-      # NVIDIA_API_KEY must be passed from environment
     depends_on:
       - postgres
       - redis
