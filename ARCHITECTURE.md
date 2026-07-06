@@ -330,3 +330,50 @@ Trusted Sources → Crawler/API → Cleaning → Deduplicate → Chunk → Embed
 # 9. Catatan Penting
 
 Secara teknis, proyek ini **sangat memungkinkan** dikerjakan oleh seorang solo full‑stack developer dengan memanfaatkan teknologi open source dan layanan gratis untuk tahap awal. Tantangan terbesar tetap pada kualitas konten AI; prioritas utama adalah membangun **Knowledge Pipeline** yang kuat, melakukan fact‑check, dan mengembangkan **Knowledge Graph** untuk personalisasi belajar adaptif.
+
+---
+
+# 10. Status Implementasi Aktual (ground truth)
+
+> Dokumen bagian 1–9 adalah *target arsitektur*. Bagian ini mencerminkan **apa yang benar‑benar berjalan di kode** per `AUDIT.md` (2026‑07). Update ketika ada perubahan material.
+
+## Yang sudah jalan
+| Area | Realita |
+|------|---------|
+| Frontend | Next.js 14.2.35 + React 18 + TypeScript + Tailwind. `web/lib/api.ts` pakai `fetch` native, `credentials: include` untuk cookie auth, 401→`/auth/refresh`→retry interceptor. Rewrites pakai `process.env.API_UPSTREAM_URL` (fallback `localhost:3001`). |
+| Backend runtime | Node.js 22 + **TypeScript** (`backend/tsconfig.json` strict, `allowJs: true`, `noEmit: true`, runtime `tsx`). 30 file JS dikonversi ke TS. |
+| API style | REST only di `/api/*` (no versioning, no GraphQL). |
+| Auth | Email+password (bcrypt rounds 10), JWT access 15 min + refresh 7 hari. Refresh token **di-hash** SHA‑256 di `Session.refreshToken`. `/api/feed/refresh` + `/api/feed/refresh/sse` wajib auth; pipeline selalu lewat BullMQ (202 Accepted), `executePipeline` in‑process sudah dihapus dari path ini. |
+| Security | `app.set('trust proxy', 1)`, CORS `localhost`+`trycloudflare.com` (dev only), `helmet`, request logger me-redact `password`/`token`/`email`/`name`/`text`/`comment`/dsb. |
+| Data plane | PostgreSQL 14 + PGVector, Prisma 5.7, Redis 7. MinIO container jalan tapi **belum dipakai** aplikasi. |
+| Queue / worker | BullMQ 5.79 di atas Redis. Worker di `backend/src/queue/workers/pipelineWorker.ts`, Redis lock fail‑closed di SSE refresh. |
+| Pipeline | Crawler (arXiv) → Cleaner → Chunker → Embedder (NIM embed) → Vector store → Retriever → LLM (NIM) → Fact‑check → Moderator → Publisher. Domain output LLM divalidasi via `isAllowedDomain()`, fallback `"general"`. |
+| Cache | Redis per‑domain feed cache, TTL 15 min. SCAN‑based invalidation (no `KEYS`). |
+| Anonymous view dedup | Redis SETNX 24h TTL pada `sha256(salt+ip+ua+cardId)`. |
+| Indexes | Composite `(domain, createdAt DESC)`, `(createdAt, engagementScore DESC)`, plus `cardId`/`userId` di views/comments. |
+| Search | `title contains` ILIKE (single column, leading wildcard — limit di-clamp 100). tsvector **belum** diimplementasikan. |
+| Limit clamping | `Math.min(parseInt(limit) || 20, 100)` di trust boundary untuk semua endpoint yang menerima `limit` (feed, knowledge, generate). |
+| Engagement N+1 | `updateEngagementScore` pakai 3 query paralel (`findUnique`+`count`+`count`), bukan `include`+`length`. `GET /:id` pakai 1 round trip (Promise.all). |
+| Tests | `backend/src/tests/{auth,feed,phase1,phase2,phase3}.test.js` — 29/29 pass via `ts-jest`. Frontend belum punya test. |
+| Container | `docker-compose.yml` punya `${REDIS_PORTS:-6379:6379}` default, bukan bare `${REDIS_PORTS}`. |
+| Dead deps | `axios`, `js-cookie`, `@types/js-cookie`, semua `@storybook/*`, `@chromatic-com/storybook`, `@vitest/*`, `vitest`, `playwright`, `vite` sudah dihapus dari `web/package.json`. |
+
+## Belum jalan / roadmap
+* GraphQL endpoint, `/api/v1/...` versioning
+* Read replica, multi‑region deployment
+* MinIO (object storage untuk avatar) — service jalan, integrasi belum
+* Cloudflare CDN (saat ini cuma tunnel untuk dev)
+* Prometheus + Grafana, Loki logging terstruktur
+* Knowledge graph per user, spaced repetition, semantic vector search
+* tsvector full‑text search (GIN index) — saat ini `title contains` ILIKE dengan leading wildcard
+* Refresh token rotation on `/auth/refresh` (saat ini refresh token lama tetap valid sampai expiry)
+* Soft delete + audit trail untuk admin `DELETE /admin/feed/:id`
+* Denormalized `likeCount`/`commentsCount` di KnowledgeCard (saat ini hit count query, masih O(1) via Phase 2.13 tapi bisa di‑drop kalau traffic tinggi)
+* CSRF middleware (audit #3.5 masih open — Origin/Referer guard untuk mutating routes)
+
+## Verifikasi runtime (2026‑07‑06)
+* Backend boot via `tsx src/index.ts` clean, pipeline worker start, Redis connect
+* 12 endpoint di‑smoke via curl, semua expected status code
+* Playwright E2E: login → onboarding → feed → like → card detail → search → save → profile
+* 0 console error di browser, 0 error/warning di backend log (selain React DevTools recommendation)
+* Bug yang ditemukan saat runtime: `REFRESH_TOKEN_SECRET` env name di‑rename ke `JWT_REFRESH_SECRET` saat TS migration, server crash. Fix: revert env name + `SESSION_SECRET` jadi optional.

@@ -2,9 +2,35 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
+  // ponytail: mark the refresh call so the 401 retry loop doesn't recurse.
+  _skipRefresh?: boolean;
 }
 
-async function request(path: string, options: FetchOptions = {}) {
+// ponytail: single in-flight refresh promise. If 10 requests 401 at once,
+// they all share one POST /auth/refresh instead of stampeding the endpoint.
+let refreshInflight: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshInflight) {
+    refreshInflight = (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        return res.ok;
+      } catch {
+        return false;
+      } finally {
+        // Defer clearing so concurrent 401s in the same microtask see the same promise.
+        setTimeout(() => { refreshInflight = null; }, 0);
+      }
+    })();
+  }
+  return refreshInflight;
+}
+
+async function request(path: string, options: FetchOptions = {}): Promise<unknown> {
   let url = `${API_BASE_URL}${path}`;
   if (options.params) {
     const searchParams = new URLSearchParams();
@@ -24,11 +50,22 @@ async function request(path: string, options: FetchOptions = {}) {
     ...(options.headers || {}),
   };
 
-  const response = await fetch(url, {
+  const doFetch = () => fetch(url, {
     ...options,
     headers,
-    credentials: 'include', // Setara dengan withCredentials: true di axios (penting untuk cloudflared tunnel cookies)
+    credentials: 'include',
   });
+
+  let response = await doFetch();
+
+  // 401 + not the refresh endpoint itself + not an auth route → try refresh + retry once.
+  const isAuthPath = path.startsWith('/auth/');
+  if (response.status === 401 && !options._skipRefresh && !isAuthPath) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      response = await doFetch();
+    }
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -47,19 +84,19 @@ const api = {
 
 export const authAPI = {
   register: async (data: { name: string; email: string; password: string }) => {
-    const response = await api.post('/auth/register', data);
+    const response = await api.post('/auth/register', data, { _skipRefresh: true });
     return response;
   },
   login: async (data: { email: string; password: string }) => {
-    const response = await api.post('/auth/login', data);
+    const response = await api.post('/auth/login', data, { _skipRefresh: true });
     return response;
   },
   logout: async () => {
-    const response = await api.post('/auth/logout');
+    const response = await api.post('/auth/logout', undefined, { _skipRefresh: true });
     return response;
   },
   getMe: async () => {
-    const response = await api.get('/auth/me');
+    const response = await api.get('/auth/me', { _skipRefresh: true });
     return response;
   },
 };

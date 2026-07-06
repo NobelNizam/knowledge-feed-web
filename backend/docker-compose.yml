@@ -18,7 +18,7 @@ services:
     image: redis:7-alpine
     container_name: knowledge-feed-redis
     ports:
-      - ${REDIS_PORTS}
+      - "${REDIS_PORTS:-6379:6379}"
     volumes:
       - redis_data:/data
     restart: unless-stopped

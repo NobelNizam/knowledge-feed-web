@@ -48,6 +48,10 @@ model KnowledgeCard {
   
   @@map("knowledge_cards")
   @@index([moderationStatus])
+  // ponytail: feed/personalized feed query is "domain IN (...) ORDER BY createdAt DESC".
+  @@index([domain, createdAt(sort: Desc)], map: "idx_knowledge_cards_domain_created")
+  // ponytail: trending query is "createdAt >= 7d ORDER BY engagementScore DESC".
+  @@index([createdAt, engagementScore(sort: Desc)], map: "idx_knowledge_cards_created_engagement")
 }
 
 enum Role {
@@ -219,6 +223,8 @@ model View {
   card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
   @@unique([userId, cardId])
+  @@index([cardId], map: "idx_views_card_id")
+  @@index([userId], map: "idx_views_user_id")
   @@map("views")
 }
 
@@ -237,5 +243,6 @@ model Comment {
   parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("CommentReplies")
 
+  @@index([cardId], map: "idx_comments_card_id")
   @@map("comments")
 }
