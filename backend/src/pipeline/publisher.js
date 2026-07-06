@@ -1,12 +1,13 @@
 /**
  * Publisher — Database Publish & Cache Invalidation
- * 
+ *
  * Menyimpan KnowledgeCard yang sudah lolos fact-check & moderation
  * ke database, dan menghapus cache feed.
  */
 
 
 const prisma = require('../lib/prisma');
+const { isAllowedDomain } = require('./moderator');
 
 /**
  * Publish sebuah knowledge card ke database
@@ -35,12 +36,19 @@ async function publishCard(cardData, factCheckResult, moderationResult, sourceCh
       return acc;
     }, []);
 
+  // ponytail: validate the LLM-produced domain against the allowlist before
+  // it ever reaches the DB. The LLM is told to pick from a fixed list, but
+  // it sometimes drifts; an unvalidated domain would pollute the domain
+  // cache keyspace (`feed:domain:*`) and break the filter panel.
+  const rawDomain = (cardData.domain || 'general').trim();
+  const safeDomain = isAllowedDomain(rawDomain) ? rawDomain : 'general';
+
   // Create the card
   const card = await prisma.knowledgeCard.create({
     data: {
       title: cardData.title,
       content: cardData.content,
-      domain: cardData.domain || 'general',
+      domain: safeDomain,
       tags: cardData.tags || [],
       type: cardData.type || 'QUICK_FACT',
       aiModel: cardData.aiModel || process.env.NVIDIA_MODEL || 'unknown',

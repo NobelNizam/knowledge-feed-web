@@ -6,10 +6,18 @@ const authMiddleware = require('../middleware/auth');
 
 const prisma = require('../lib/prisma');
 
+// ponytail: trust-boundary clamp; same shape as feed.js. See comment there.
+const clampLimit = (raw, max = 100, fallback = 20) => {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+};
+
 // GET /api/knowledge/search - Search cards
 router.get('/search', async (req, res) => {
   try {
-    const { q, domain, limit = 20 } = req.query;
+    const { q, domain } = req.query;
+    const limit = clampLimit(req.query.limit);
 
     const cards = await prisma.knowledgeCard.findMany({
       where: {
@@ -18,7 +26,7 @@ router.get('/search', async (req, res) => {
           domain ? { domain } : {},
         ],
       },
-      take: parseInt(limit),
+      take: limit,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -32,7 +40,7 @@ router.get('/search', async (req, res) => {
 // GET /api/knowledge/trending - Get trending cards
 router.get('/trending', async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const limit = clampLimit(req.query.limit, 50, 10);
 
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -40,7 +48,7 @@ router.get('/trending', async (req, res) => {
     const cards = await prisma.knowledgeCard.findMany({
       where: { createdAt: { gte: weekAgo } },
       orderBy: { engagementScore: 'desc' },
-      take: parseInt(limit),
+      take: limit,
     });
 
     res.json({ success: true, data: cards });
@@ -146,29 +154,27 @@ router.get('/:id', async (req, res) => {
 });
 
 // Helper untuk menghitung dan memperbarui engagement score
+// ponytail: counts in one round trip instead of pulling every like/view/comment row.
+// Denormalized counts (viewCount, shareCount) come straight from the card row.
 async function updateEngagementScore(cardId) {
   try {
-    const card = await prisma.knowledgeCard.findUnique({
-      where: { id: cardId },
-      include: {
-        likes: true,
-        views: true,
-        comments: true,
-      }
-    });
-    
+    const [card, likesCount, commentsCount] = await Promise.all([
+      prisma.knowledgeCard.findUnique({
+        where: { id: cardId },
+        select: { viewCount: true, shareCount: true },
+      }),
+      prisma.like.count({ where: { cardId } }),
+      prisma.comment.count({ where: { cardId } }),
+    ]);
+
     if (!card) return;
-    
-    const likesCount = card.likes.length;
-    const commentsCount = card.comments.length;
-    const viewsCount = card.viewCount;
-    const sharesCount = card.shareCount;
-    
-    const engagementScore = (likesCount * 3) + (commentsCount * 5) + (viewsCount * 1) + (sharesCount * 4);
-    
+
+    const engagementScore =
+      (likesCount * 3) + (commentsCount * 5) + (card.viewCount * 1) + (card.shareCount * 4);
+
     await prisma.knowledgeCard.update({
       where: { id: cardId },
-      data: { engagementScore }
+      data: { engagementScore },
     });
   } catch (error) {
     console.error('Failed to update engagement score:', error);

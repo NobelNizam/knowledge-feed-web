@@ -3,6 +3,7 @@ const router = express.Router();
 const { Prisma } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../lib/jwtSecrets');
+const authMiddleware = require('../middleware/auth');
 
 const prisma = require('../lib/prisma');
 
@@ -12,7 +13,14 @@ const { getDomainCache, setDomainCache, invalidateUserCache } = require('../serv
 const { executePipeline } = require('../queue/workers/pipelineWorker');
 const { resolveFilterToTopics, getLevel2ForLevel1 } = require('../services/domainHierarchy');
 
-// Middleware helper untuk get userId jika ada auth, jika tidak null
+// ponytail: trust-boundary clamp; [1,100], default 20. Do not raise the cap
+// until a paginated cursor replaces offset reads.
+const clampLimit = (raw, max = 100, fallback = 20) => {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+};
+
 const getUserId = (req) => req.user ? req.user.id : null;
 
 /**
@@ -98,7 +106,8 @@ async function populateCacheIfNeeded(domainTarget, domainFilter) {
 // GET /api/feed - Get feed with pagination
 router.get('/', async (req, res) => {
   try {
-    const { limit = 20, offset = 0, domains, seenIds } = req.query;
+    const { offset = 0, domains, seenIds } = req.query;
+    const limit = clampLimit(req.query.limit);
     let userId = null;
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
@@ -134,10 +143,10 @@ router.get('/', async (req, res) => {
       const filtered = cachedCards.filter(card => !excludeSet.has(card.id));
       
       // Jika data tersisa cukup setelah disaring, ambil dari cache
-      if (filtered.length >= parseInt(limit)) {
-        cards = filtered.slice(0, parseInt(limit));
+      if (filtered.length >= limit) {
+        cards = filtered.slice(0, limit);
         usedCache = true;
-      } else if (filtered.length > 0 && filtered.length < parseInt(limit)) {
+      } else if (filtered.length > 0 && filtered.length < limit) {
         // Ambil sisa yang ada, tapi campur dengan query DB jika hasMore
         cards = filtered;
       }
@@ -150,14 +159,14 @@ router.get('/', async (req, res) => {
           domain: domainFilter ? { in: domainFilter } : undefined,
           id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined
         },
-        take: parseInt(limit),
+        take: limit,
         orderBy: { createdAt: 'desc' },
       });
 
       // Gabungkan data dari cache filter dengan database (jika ada irisan parsial)
       const existingIds = new Set(cards.map(c => c.id));
       const uniqueDbCards = dbCards.filter(c => !existingIds.has(c.id));
-      cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
+      cards = [...cards, ...uniqueDbCards].slice(0, limit);
     }
 
     const enrichedCards = await enrichCardInteractions(cards, userId);
@@ -166,9 +175,9 @@ router.get('/', async (req, res) => {
       success: true,
       data: enrichedCards,
       pagination: {
-        limit: parseInt(limit),
+        limit,
         offset: parseInt(offset),
-        hasMore: cards.length === parseInt(limit) || cards.length > 0,
+        hasMore: cards.length === limit || cards.length > 0,
       },
     };
 
@@ -182,7 +191,8 @@ router.get('/', async (req, res) => {
 // POST /api/feed/personalized - Get personalized feed
 router.post('/personalized', async (req, res) => {
   try {
-    const { limit = 20, offset = 0 } = req.query;
+    const { offset = 0 } = req.query;
+    const limit = clampLimit(req.query.limit);
     const { domains, seenIds } = req.body;
     let userId = null;
     const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
@@ -214,8 +224,8 @@ router.post('/personalized', async (req, res) => {
       const excludeSet = new Set(excludeIds);
       const filtered = cachedCards.filter(card => !excludeSet.has(card.id));
       
-      if (filtered.length >= parseInt(limit)) {
-        cards = filtered.slice(0, parseInt(limit));
+      if (filtered.length >= limit) {
+        cards = filtered.slice(0, limit);
         usedCache = true;
       } else if (filtered.length > 0) {
         cards = filtered;
@@ -228,13 +238,13 @@ router.post('/personalized', async (req, res) => {
           domain: { in: domains },
           id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined
         },
-        take: parseInt(limit),
+        take: limit,
         orderBy: { createdAt: 'desc' },
       });
 
       const existingIds = new Set(cards.map(c => c.id));
       const uniqueDbCards = dbCards.filter(c => !existingIds.has(c.id));
-      cards = [...cards, ...uniqueDbCards].slice(0, parseInt(limit));
+      cards = [...cards, ...uniqueDbCards].slice(0, limit);
     }
 
     const enrichedCards = await enrichCardInteractions(cards, userId);
@@ -243,9 +253,9 @@ router.post('/personalized', async (req, res) => {
       success: true,
       data: enrichedCards,
       pagination: {
-        limit: parseInt(limit),
+        limit,
         offset: parseInt(offset),
-        hasMore: cards.length === parseInt(limit) || cards.length > 0,
+        hasMore: cards.length === limit || cards.length > 0,
       },
     };
 
@@ -256,70 +266,62 @@ router.post('/personalized', async (req, res) => {
   }
 });
 
-// POST /api/feed/refresh - Sync generate 5 items for pull-to-refresh (filter-aware)
-router.post('/refresh', async (req, res) => {
+// POST /api/feed/refresh - Async enqueue only; pipeline never runs in-request.
+// Clients should subscribe to /api/feed/refresh/sse for progress.
+router.post('/refresh', authMiddleware, async (req, res) => {
   try {
     const { filterType = 'all', filterValue = 'Semua' } = req.body || {};
-    
+
     let targetFilterType = filterType;
     let targetFilterValue = filterValue;
 
     if (filterType === 'all') {
-      let userId = null;
-      const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, JWT_SECRET);
-          userId = decoded.userId;
-        } catch (e) {}
-      }
-
-      if (userId) {
-        const prefs = await prisma.userPreferences.findUnique({
-          where: { userId }
-        });
-        if (prefs && prefs.domains && prefs.domains.length > 0) {
-          targetFilterType = 'preferences';
-          targetFilterValue = prefs.domains;
-          console.log(`[FeedRefresh] Loading preferences for user ${userId}: [${prefs.domains.join(', ')}]`);
-        }
+      const userId = req.user.userId;
+      const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
+      if (prefs && prefs.domains && prefs.domains.length > 0) {
+        targetFilterType = 'preferences';
+        targetFilterValue = prefs.domains;
+        console.log(`[FeedRefresh] Loading preferences for user ${userId}: [${prefs.domains.join(', ')}]`);
       }
     }
 
-    // Resolve filter ke topik konkret menggunakan hierarki 3 level
     const { disciplines, subtopicMap } = resolveFilterToTopics(targetFilterType, targetFilterValue);
-    
     console.log(`[FeedRefresh] Filter: ${filterType}/${filterValue} → Disciplines: [${disciplines.join(', ')}]`);
-    if (subtopicMap && Object.keys(subtopicMap).length > 0) {
-      for (const [disc, subs] of Object.entries(subtopicMap)) {
-        console.log(`[FeedRefresh]   ${disc} → subtopics: [${subs.join(', ')}]`);
-      }
-    }
 
     const pipelineJob = await createPipelineJob({
       type: 'full_pipeline',
       input: { topics: disciplines, count: 5, subtopicMap },
     });
 
+    let bullmqJob;
+    try {
+      bullmqJob = await addPipelineJob({
+        topics: disciplines,
+        count: 5,
+        pipelineJobId: pipelineJob.id,
+      });
+    } catch (queueErr) {
+      // Fail closed: if Redis/BullMQ is down, do not run the pipeline in-request
+      // (it would block the event loop for 10-30s and bypass the concurrency limit).
+      console.error('[FeedRefresh] Queue unavailable, rejecting refresh:', queueErr.message);
+      await prisma.pipelineJob.update({
+        where: { id: pipelineJob.id },
+        data: { status: 'failed', error: `Queue unavailable: ${queueErr.message}` },
+      });
+      return res.status(503).json({ error: 'Feed refresh queue is currently unavailable. Please retry shortly.' });
+    }
+
     await prisma.pipelineJob.update({
       where: { id: pipelineJob.id },
-      data: { status: 'processing', startedAt: new Date() },
+      data: { bullmqJobId: bullmqJob.id, status: 'queued' },
     });
 
-    const result = await executePipeline({
-      topics: disciplines,
-      count: 5,
-      pipelineJobId: pipelineJob.id,
-      subtopicMap,
-    });
-
-    // Invalidate cache for the user since new content has been generated
-    const userId = getUserId(req);
-    await invalidateUserCache(userId);
-
-    res.json({
+    res.status(202).json({
       success: true,
-      data: result.publishedCards || []
+      jobId: pipelineJob.id,
+      bullmqJobId: bullmqJob.id,
+      status: 'queued',
+      sseUrl: `/api/feed/refresh/sse?filterType=${encodeURIComponent(filterType)}&filterValue=${encodeURIComponent(typeof filterValue === 'string' ? filterValue : 'Semua')}`,
     });
   } catch (error) {
     console.error('Feed refresh error:', error);
@@ -327,31 +329,22 @@ router.post('/refresh', async (req, res) => {
   }
 });
 
-// GET /api/feed/refresh/sse - Server-Sent Events endpoint untuk real-time refresh feed
-router.get('/refresh/sse', async (req, res) => {
+// GET /api/feed/refresh/sse - Server-Sent Events endpoint untuk real-time refresh feed.
+// Requires auth; the per-user Redis lock is mandatory (no in-process fallback) so
+// concurrent refreshes collapse onto a single pipeline run.
+router.get('/refresh/sse', authMiddleware, async (req, res) => {
   const { filterType = 'all', filterValue = 'Semua', seenIds } = req.query || {};
-  let userId = null;
-  const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      userId = decoded.userId;
-    } catch (e) {}
-  }
+  const userId = req.user.userId;
 
   // 1. Tentukan target filter dan resolve ke disiplin/domain
   let targetFilterType = filterType;
   let targetFilterValue = filterValue;
-  let userPrefs = null;
 
-  if (filterType === 'all' && userId) {
-    const prefs = await prisma.userPreferences.findUnique({
-      where: { userId }
-    });
+  if (filterType === 'all') {
+    const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
     if (prefs && prefs.domains && prefs.domains.length > 0) {
       targetFilterType = 'preferences';
       targetFilterValue = prefs.domains;
-      userPrefs = prefs.domains;
     }
   }
 
@@ -367,16 +360,14 @@ router.get('/refresh/sse', async (req, res) => {
 
   // 2. Dapatkan seenIds (gabungan data DB views + seenIds dari query)
   let viewedCardIds = [];
-  if (userId) {
-    try {
-      const views = await prisma.view.findMany({
-        where: { userId },
-        select: { cardId: true }
-      });
-      viewedCardIds = views.map(v => v.cardId);
-    } catch (err) {
-      console.error('[FeedRefreshSSE] Error loading user views:', err.message);
-    }
+  try {
+    const views = await prisma.view.findMany({
+      where: { userId },
+      select: { cardId: true }
+    });
+    viewedCardIds = views.map(v => v.cardId);
+  } catch (err) {
+    console.error('[FeedRefreshSSE] Error loading user views:', err.message);
   }
 
   const querySeenIds = seenIds ? seenIds.split(',').filter(id => id.trim() !== '') : [];
@@ -408,38 +399,44 @@ router.get('/refresh/sse', async (req, res) => {
   // Jika ada kartu di database, kirim langsung dan sudahi stream
   if (availableCards.length > 0) {
     console.log(`[FeedRefreshSSE] DB Hit! Found ${availableCards.length} cards in DB for filter: ${filterType}/${filterValue}`);
-    
-    // Kita perlu menyertakan interaksi count (likeCount, liked, saved, commentsCount)
     const enrichedCards = await enrichCardInteractions(availableCards, userId);
-
     res.write(`event: complete\ndata: ${JSON.stringify({ cards: enrichedCards, source: 'database' })}\n\n`);
     res.end();
     return;
   }
 
-  // Jika tidak ada kartu di database yang belum dibaca: Pemicu AI Pipeline
-  console.log(`[FeedRefreshSSE] DB Miss. Triggering AI Pipeline for filter: ${filterType}/${filterValue}`);
-
+  // DB miss → trigger AI pipeline. Lock is mandatory: if Redis is down we
+  // refuse rather than risk a duplicate concurrent pipeline run.
   const redis = getRedisConnection();
-  const lockKey = userId 
-    ? `lock:refresh:user:${userId}` 
-    : `lock:refresh:filter:${filterType}:${filterValue}`;
-
-  if (redis) {
-    try {
-      const isLocked = await redis.set(lockKey, 'locked', 'NX', 'EX', 60);
-      if (!isLocked) {
-        console.log(`[FeedRefreshSSE] Lock active for key: ${lockKey}`);
-        res.write(`event: error\ndata: ${JSON.stringify({ message: 'Proses penyegaran (generasi AI) sedang berjalan. Harap tunggu.' })}\n\n`);
-        res.end();
-        return;
-      }
-    } catch (lockErr) {
-      console.error('[FeedRefreshSSE] Redis lock check failed, proceeding without lock:', lockErr.message);
-    }
+  if (!redis) {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: 'Refresh unavailable: cache layer offline. Please retry shortly.' })}\n\n`);
+    res.end();
+    return;
   }
 
-  // Buat PipelineJob
+  const lockKey = `lock:refresh:user:${userId}`;
+  let lockAcquired = false;
+  try {
+    const setRes = await redis.set(lockKey, 'locked', 'NX', 'EX', 60);
+    lockAcquired = setRes === 'OK';
+  } catch (lockErr) {
+    console.error('[FeedRefreshSSE] Redis lock acquire failed:', lockErr.message);
+    res.write(`event: error\ndata: ${JSON.stringify({ message: 'Refresh unavailable: lock layer error. Please retry shortly.' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (!lockAcquired) {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: 'Proses penyegaran (generasi AI) sedang berjalan. Harap tunggu.' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Run the pipeline directly in this stream. The worker (activeCallbacks
+  // in pipelineWorker) is what streams progress to this response, but the
+  // pipeline itself runs here because the SSE channel owns the result and
+  // the per-user lock + auth already gate concurrent runs. POST /refresh
+  // is the async-only entry point.
   let pipelineJob = null;
   const { disciplines, subtopicMap } = resolveFilterToTopics(targetFilterType, targetFilterValue);
 
@@ -449,62 +446,39 @@ router.get('/refresh/sse', async (req, res) => {
       input: { topics: disciplines, count: 5, subtopicMap },
     });
 
-    await prisma.pipelineJob.update({
-      where: { id: pipelineJob.id },
-      data: { status: 'processing', startedAt: new Date() },
-    });
-
-    // Kirim event awal
     res.write(`event: start\ndata: ${JSON.stringify({ jobId: pipelineJob.id, estimatedSeconds: 20 })}\n\n`);
 
-    // Jalankan executePipeline
+    const ESTIMATED_SECONDS = {
+      initialize: 18, crawl: 16, clean: 14, save_sources: 13,
+      chunk: 12, embed: 10, store_vectors: 8, retrieve_generate: 6,
+      fact_check: 3, moderate: 2, publish: 1, generate_fallback: 6,
+    };
+    const sendEvent = (event, payload) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+
     const result = await executePipeline({
       topics: disciplines,
       count: 5,
       pipelineJobId: pipelineJob.id,
       subtopicMap
-    }, (step, progress, details) => {
-      let estimatedSeconds = 0;
-      switch(step) {
-        case 'initialize': estimatedSeconds = 18; break;
-        case 'crawl': estimatedSeconds = 16; break;
-        case 'clean': estimatedSeconds = 14; break;
-        case 'save_sources': estimatedSeconds = 13; break;
-        case 'chunk': estimatedSeconds = 12; break;
-        case 'embed': estimatedSeconds = 10; break;
-        case 'store_vectors': estimatedSeconds = 8; break;
-        case 'retrieve_generate': estimatedSeconds = 6; break;
-        case 'fact_check': estimatedSeconds = 3; break;
-        case 'moderate': estimatedSeconds = 2; break;
-        case 'publish': estimatedSeconds = 1; break;
-        case 'generate_fallback': estimatedSeconds = 6; break;
-        default: estimatedSeconds = 0;
-      }
-      res.write(`event: progress\ndata: ${JSON.stringify({ step, progress, estimatedSeconds })}\n\n`);
+    }, (step, progress) => {
+      const estimatedSeconds = ESTIMATED_SECONDS[step] || 0;
+      sendEvent('progress', { step, progress, estimatedSeconds });
     });
 
-    // Invalidate user cache
     await invalidateUserCache(userId);
 
-    // Kirim complete event dengan hasil publishedCards
-    const publishedCards = result.publishedCards || [];
-    const publishedCardIds = publishedCards.map(c => c.id);
-
-    const enrichedPublishedCards = await enrichCardInteractions(publishedCards, userId);
-
-    res.write(`event: complete\ndata: ${JSON.stringify({ cards: enrichedPublishedCards, source: 'pipeline' })}\n\n`);
+    const enrichedPublishedCards = await enrichCardInteractions(result.publishedCards || [], userId);
+    sendEvent('complete', { cards: enrichedPublishedCards, source: 'pipeline' });
   } catch (error) {
     console.error('[FeedRefreshSSE] Pipeline error:', error);
     res.write(`event: error\ndata: ${JSON.stringify({ message: error.message || 'Gagal menghasilkan konten feed via AI pipeline' })}\n\n`);
   } finally {
-    // Hapus Redis lock
-    if (redis) {
-      try {
-        await redis.del(lockKey);
-        console.log(`[FeedRefreshSSE] Lock deleted for key: ${lockKey}`);
-      } catch (delErr) {
-        console.error('[FeedRefreshSSE] Failed to delete Redis lock:', delErr.message);
-      }
+    try {
+      await redis.del(lockKey);
+    } catch (delErr) {
+      console.error('[FeedRefreshSSE] Failed to delete Redis lock:', delErr.message);
     }
     res.end();
   }

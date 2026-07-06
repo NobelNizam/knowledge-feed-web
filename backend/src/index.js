@@ -15,6 +15,11 @@ const generateRoutes = require('./routes/generate');
 const app = express();
 const prisma = require('./lib/prisma');
 
+// Trust the first proxy (Cloudflare tunnel, nginx, etc.) so that
+// req.ip, req.protocol, and req.secure reflect the real client/edge.
+// Required for secure cookies behind a TLS-terminating proxy.
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet());
 app.use(cors({
@@ -27,15 +32,16 @@ app.use(cors({
       process.env.FRONTEND_URL
     ].filter(Boolean);
 
-    // Tambahkan IP lokal untuk development
-    if (process.env.NODE_ENV !== 'production') {
+    const isDev = process.env.NODE_ENV !== 'production';
+    // Dev-only conveniences: LAN IPs and the throwaway cloudflared tunnel domain.
+    if (isDev) {
       const localIPs = Array.from({ length: 14 }, (_, i) => `http://192.168.1.${i + 2}:3000`);
       allowedOrigins.push(...localIPs);
     }
 
-    const isAllowed = allowedOrigins.includes(origin) || 
-                      origin.endsWith('.trycloudflare.com') ||
-                      (process.env.NODE_ENV !== 'production' && origin.includes('localhost'));
+    const isAllowed = allowedOrigins.includes(origin) ||
+                      (isDev && origin.includes('localhost')) ||
+                      (isDev && origin.endsWith('.trycloudflare.com'));
 
     if (isAllowed) {
       return callback(null, true);

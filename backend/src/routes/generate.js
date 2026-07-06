@@ -15,6 +15,13 @@ const { executePipeline } = require('../queue/workers/pipelineWorker');
 
 const prisma = require('../lib/prisma');
 
+// ponytail: trust-boundary clamp; same shape as feed.js/knowledge.js.
+const clampLimit = (raw, max = 100, fallback = 20) => {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+};
+
 /**
  * POST /api/generate
  * Trigger AI content pipeline
@@ -168,10 +175,11 @@ router.get('/stats', authMiddleware, async (req, res) => {
  */
 router.get('/sources', authMiddleware, async (req, res) => {
   try {
-    const { limit = 20, offset = 0 } = req.query;
+    const { offset = 0 } = req.query;
+    const limit = clampLimit(req.query.limit);
 
     const sources = await prisma.knowledgeSource.findMany({
-      take: parseInt(limit),
+      take: limit,
       skip: parseInt(offset),
       orderBy: { createdAt: 'desc' },
       include: {
@@ -184,7 +192,7 @@ router.get('/sources', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       data: sources,
-      pagination: { limit: parseInt(limit), offset: parseInt(offset), total },
+      pagination: { limit, offset: parseInt(offset), total },
     });
   } catch (error) {
     console.error('Sources error:', error);

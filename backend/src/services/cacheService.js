@@ -64,67 +64,67 @@ async function invalidateDomainCache(domain) {
   return false;
 }
 
+// ponytail: SCAN-based key collection, batches DEL by 200 to keep memory
+// bounded on a large keyspace. Replaces O(N) blocking KEYS. Upgrade path:
+// use UNLINK (non-blocking del) once on Redis >= 4.0.
+async function deleteByPattern(pattern) {
+  const redis = getRedisConnection();
+  if (!redis) return 0;
+
+  const stream = redis.scanStream({ match: pattern, count: 200 });
+  const collected = [];
+  for await (const batch of stream) {
+    for (const k of batch) collected.push(k);
+  }
+  if (collected.length === 0) return 0;
+
+  const CHUNK = 200;
+  for (let i = 0; i < collected.length; i += CHUNK) {
+    await redis.del(...collected.slice(i, i + CHUNK));
+  }
+  return collected.length;
+}
+
 /**
  * Menghapus semua cache domain (keys feed:domain:*)
  */
 async function invalidateAllDomainCaches() {
-  const redis = getRedisConnection();
-  if (!redis) return false;
-
   try {
-    const keys = await redis.keys('feed:domain:*');
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await deleteByPattern('feed:domain:*');
     return true;
   } catch (err) {
     console.error('[CacheService] Error invalidating all domain caches:', err.message);
+    return false;
   }
-  return false;
 }
-
-
 
 /**
  * Menghapus cache (invalidasi) untuk seorang user (Legacy)
  */
 async function invalidateUserCache(userId) {
-  const redis = getRedisConnection();
-  if (!redis) return false;
-
   try {
-    const keys = await redis.keys(`feed:user:${userId || 'anonymous'}:*`);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await deleteByPattern(`feed:user:${userId || 'anonymous'}:*`);
     return true;
   } catch (err) {
     console.error('[CacheService] Error invalidating user cache:', err.message);
+    return false;
   }
-  return false;
 }
 
 /**
  * Menghapus cache (invalidasi) untuk semua user (global) + clear domain caches
  */
 async function invalidateAllFeedCache() {
-  const redis = getRedisConnection();
-  if (!redis) return false;
-
   try {
     // Bersihkan cache domain baru
     await invalidateAllDomainCaches();
-
     // Bersihkan cache user (Legacy)
-    const keys = await redis.keys('feed:user:*');
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await deleteByPattern('feed:user:*');
     return true;
   } catch (err) {
     console.error('[CacheService] Error invalidating global cache:', err.message);
+    return false;
   }
-  return false;
 }
 
 module.exports = {
