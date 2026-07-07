@@ -221,6 +221,13 @@ interface ResolveResult {
   subtopicMap: Record<string, string[]>;
 }
 
+// ponytail: curated default 10 disiplin lintas domain untuk fallback saat user
+// belum set preferensi. Cegah generate 121 acak yang boros token & tidak relevan.
+const DEFAULT_DISCIPLINES: string[] = [
+  'Artificial Intelligence', 'Physics', 'Biology', 'Economics', 'Psychology',
+  'Mathematics', 'Climate Science', 'Linguistics', 'Data Science', 'Philosophy',
+];
+
 function resolveFilterToTopics(
   filterType: string,
   filterValue: string | string[]
@@ -262,8 +269,7 @@ function resolveFilterToTopics(
     return { disciplines: picked, subtopicMap };
   }
 
-  const allLevel2 = getAllLevel2();
-  const picked = pickRandom(allLevel2, 5);
+  const picked = pickRandom(DEFAULT_DISCIPLINES, Math.min(5, DEFAULT_DISCIPLINES.length));
   const subtopicMap: Record<string, string[]> = {};
   for (const disc of picked) {
     const allSubtopics = getLevel3ForLevel2(disc);
@@ -274,6 +280,7 @@ function resolveFilterToTopics(
 
 export {
   DOMAIN_HIERARCHY,
+  DEFAULT_DISCIPLINES,
   getLevel2ForLevel1,
   getLevel3ForLevel2,
   getLevel1ForLevel2,

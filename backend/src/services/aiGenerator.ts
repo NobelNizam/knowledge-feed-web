@@ -22,6 +22,16 @@ const DEFAULT_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
 
 const ALLOWED_DOMAINS: string[] = getAllLevel2();
 
+// ponytail: NVIDIA free-tier input limit is 4096 tokens. Llama tokenizer
+// averages 1 token ≈ 3.5 chars for Indo/EN mixed. 3000 chars ≈ 3500 tokens
+// leaves safe margin.
+const MAX_PROMPT_CHARS = 3000;
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const shuffled = [...arr].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, n);
+}
+
 function fuzzyMatchDomain(raw: string, candidates: string[]): string | null {
   const norm = raw.trim();
   const exact = candidates.find((c) => c.toLowerCase() === norm.toLowerCase());
@@ -48,6 +58,105 @@ interface RawCard {
   citations?: string[];
 }
 
+function buildPrompt(opts: {
+  count: number;
+  domainListForPrompt: string[];
+  subtopicMap: Record<string, string[]> | null;
+  context: string;
+  maxContextChars: number;
+}): string {
+  const { count, domainListForPrompt, subtopicMap, context, maxContextChars } = opts;
+
+  const domainPrompt = `PENTING: Setiap kartu HARUS menggunakan domain "domain" yang HANYA berasal dari daftar disiplin ilmu (Level 2) berikut — PERSIS SAMA, huruf besar/kecil mengikuti aslinya: ${domainListForPrompt.join(', ')}. JANGAN membuat domain baru. JANGAN menggunakan "General", "Other", atau nama domain di luar daftar ini. Setiap kartu cukup SATU domain.`;
+
+  let subtopicPrompt = '';
+  if (subtopicMap && Object.keys(subtopicMap).length > 0) {
+    const lines = Object.entries(subtopicMap).map(([discipline, subtopics]) => {
+      return `- Untuk disiplin "${discipline}", fokuskan konten pada sub-topik berikut: ${(subtopics as string[]).join(', ')}.`;
+    });
+    subtopicPrompt = `\nSUB-TOPIK SPESIFIK (Level 3):\n${lines.join('\n')}\nINSTRUKSI: Buat konten yang spesifik membahas sub-topik di atas. Gunakan nama sub-topik sebagai salah satu nilai "tags" pada setiap kartu.\n`;
+  }
+
+  let contextPrompt = '';
+  if (context) {
+    const maxCtx = Math.max(0, maxContextChars);
+    const truncated = context.length > maxCtx
+      ? context.substring(0, maxCtx) + '\n... [dipotong karena batas panjang konteks]'
+      : context;
+    contextPrompt = `\nKONTEKS REFERENSI:\n${truncated}\n\nINSTRUKSI: Buat konten berdasarkan konteks referensi di atas. Sertakan kutipan sumber.`;
+  }
+
+  const base = `Buatlah ${count} fakta menarik (knowledge cards) dalam bahasa Indonesia.
+${domainPrompt}
+${subtopicPrompt}
+${contextPrompt}
+
+Gaya bahasa:
+- Santai, seru, dan mudah dicerna.
+- Hindari bahasa yang terlalu baku, gunakan bahasa sehari-hari yang sopan.
+
+Format Output:
+Berikan HANYA array JSON murni (tanpa tag markdown) dengan format:
+[
+  {
+    "title": "Judul Singkat",
+    "content": "Isi fakta seru 2-3 kalimat.",
+    "domain": "NamaDisiplinLevel2",
+    "tags": ["sub-topik", "key2"],
+    "citations": ["Judul sumber"]
+  }
+]
+PENTING: Gunakan tanda kutip tunggal ('kata') alih-alih ganda di dalam nilai string untuk menghindari JSON rusak.`;
+
+  return base;
+}
+
+function extractJSON(text: string): string | null {
+  const cleaned = text
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+
+  const match = cleaned.match(/\[[\s\S]*\]/);
+  if (match) return match[0];
+
+  const salvage = cleaned.match(/\[\s*\{[\s\S]*\}/);
+  if (salvage) return salvage[0] + ']';
+
+  return null;
+}
+
+function parseCards(text: string): RawCard[] | null {
+  const jsonStr = extractJSON(text);
+  if (!jsonStr) return null;
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    try {
+      const repaired = jsonStr.replace(/(?<!\\)"([^"]*)"/g, (_m, inner) => {
+        return `"${inner.replace(/"/g, '\\"')}"`;
+      });
+      return JSON.parse(repaired);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function validateDomains(cards: RawCard[], validDomains: string[]): RawCard[] {
+  return cards.map((card) => {
+    let domain = card.domain || validDomains[0];
+    const match = fuzzyMatchDomain(domain, validDomains);
+    if (!match) {
+      console.warn(`[AIGenerator] Domain "${domain}" not in allowed list, replacing with "${validDomains[0]}"`);
+      domain = validDomains[0];
+    } else {
+      domain = match;
+    }
+    return { ...card, domain };
+  });
+}
+
 /**
  * Generate knowledge cards dengan RAG context
  */
@@ -64,106 +173,55 @@ export async function generateWithRAG({
 
   const effectiveDomains = domains && domains.length > 0 ? domains : ALLOWED_DOMAINS;
 
-  const domainPrompt = `PENTING: Setiap kartu HARUS menggunakan domain "domain" yang HANYA berasal dari daftar disiplin ilmu (Level 2) berikut — PERSIS SAMA, huruf besar/kecil mengikuti aslinya: ${effectiveDomains.join(', ')}. JANGAN membuat domain baru. JANGAN menggunakan "General", "Other", atau nama domain di luar daftar ini. Setiap kartu cukup SATU domain.`;
+  const domainListForPrompt = effectiveDomains.length <= 15
+    ? effectiveDomains
+    : pickRandom(effectiveDomains, 15);
 
-  // Build sub-topic prompt jika subtopicMap tersedia (dari hierarki Level 3)
-  let subtopicPrompt = '';
-  if (subtopicMap && Object.keys(subtopicMap).length > 0) {
-    const lines = Object.entries(subtopicMap).map(([discipline, subtopics]) => {
-      return `- Untuk disiplin "${discipline}", fokuskan konten pada sub-topik berikut: ${(subtopics as string[]).join(', ')}.`;
-    });
-    subtopicPrompt = `\nSUB-TOPIK SPESIFIK (Level 3):\n${lines.join('\n')}\nINSTRUKSI: Buat konten yang spesifik membahas sub-topik di atas. Gunakan nama sub-topik sebagai salah satu nilai "tags" pada setiap kartu.\n`;
-  }
+  const basePrompt = buildPrompt({
+    count,
+    domainListForPrompt,
+    subtopicMap: subtopicMap || null,
+    context,
+    maxContextChars: 0,
+  });
 
-  const contextPrompt = context
-    ? `\nKONTEKS REFERENSI (gunakan informasi ini sebagai sumber utama):\n${context}\n\nINSTRUKSI PENTING: Buat konten berdasarkan konteks referensi di atas. Setiap fakta HARUS berdasarkan informasi dari referensi yang disediakan. Sertakan kutipan sumber jika memungkinkan.`
-    : '';
+  let maxContextChars = Math.max(0, MAX_PROMPT_CHARS - basePrompt.length - 200);
+  if (maxContextChars < 0) maxContextChars = 0;
 
-  const prompt = `
-Buatlah ${count} fakta menarik (knowledge cards) dalam bahasa Indonesia.
-${domainPrompt}
-${subtopicPrompt}
-${contextPrompt}
+  const prompt = buildPrompt({
+    count,
+    domainListForPrompt,
+    subtopicMap: subtopicMap || null,
+    context,
+    maxContextChars,
+  });
 
-Gaya bahasa:
-- Santai, seru, dan mudah dicerna (casual, cocok untuk dibaca di sela-sela waktu luang).
-- Hindari bahasa yang terlalu baku atau kaku, gunakan bahasa sehari-hari yang sopan dan asyik.
-- Jika ada kutipan sumber, sebutkan secara natural di dalam konten.
-
-Format Output:
-Berikan HANYA array JSON murni (tanpa tag markdown \`\`\`json) dengan format objek berikut:
-[
-  {
-    "title": "Judul Menarik (Singkat)",
-    "content": "Isi fakta yang seru dan mudah dipahami, maksimal 2-3 kalimat. Sertakan referensi jika berdasarkan sumber ilmiah.",
-    "domain": "Nama disiplin ilmu Level 2 dalam Bahasa Inggris baku (misal: Physics, Artificial Intelligence, Linguistics)",
-    "tags": ["sub-topik Level 3 yang relevan", "tag2", "tag3"],
-    "citations": ["Judul sumber yang dikutip (jika ada)"]
-  }
-]
-
-ATURAN SANGAT PENTING:
-Pastikan Anda mematuhi struktur JSON yang valid! Jika Anda ingin menggunakan tanda kutip di dalam nilai string (seperti di dalam "content"), Anda WAJIB melakukan escape pada tanda kutip tersebut dengan backslash (contoh: \\\\"kata\\\\") ATAU gunakan saja tanda kutip tunggal ('kata'). Jika tidak, parsing JSON akan gagal!
-`;
-
-  const makeCall = (model: string) => async () => {
+  const makeCall = async () => {
     const completion = await openai.chat.completions.create({
-      model,
+      model: DEFAULT_MODEL,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 2048,
+      temperature: 0.3,
+      max_tokens: 4096,
     });
     return (completion.choices[0].message.content || '').trim();
   };
 
-  const extractJSON = (text: string): string | null => {
-    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    return match ? match[0] : null;
-  };
-
-  const parseCards = (text: string): RawCard[] | null => {
-    const jsonStr = extractJSON(text);
-    if (!jsonStr) return null;
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      try {
-        const repaired = jsonStr.replace(/(?<!\\)"([^"]*)"/g, (m, inner) => {
-          return `"${inner.replace(/"/g, '\\"')}"`;
-        });
-        return JSON.parse(repaired);
-      } catch {
-        return null;
-      }
-    }
-  };
-
-  let responseContent = await makeCall(DEFAULT_MODEL)();
+  let responseContent = await makeCall();
   let cardsData = parseCards(responseContent);
 
   if (!cardsData) {
     console.error('[AIGenerator] First attempt failed to parse. Retrying...');
-    responseContent = await makeCall(DEFAULT_MODEL)();
+    responseContent = await makeCall();
     cardsData = parseCards(responseContent);
   }
 
   if (!cardsData) {
-    console.error('[AIGenerator] All parse attempts failed. Raw:', responseContent.substring(0, 500));
+    const preview = responseContent.substring(0, 500);
+    console.error(`[AIGenerator] All parse attempts failed. Raw: ${preview}`);
     throw new Error('Invalid JSON format from AI');
   }
 
-  cardsData = cardsData.map((card) => {
-    let domain = card.domain || effectiveDomains[0];
-    const match = fuzzyMatchDomain(domain, effectiveDomains);
-    if (!match) {
-      console.warn(`[AIGenerator] Domain "${domain}" not in allowed list, replacing with "${effectiveDomains[0]}"`);
-      domain = effectiveDomains[0];
-    } else {
-      domain = match;
-    }
-    return { ...card, domain };
-  });
+  cardsData = validateDomains(cardsData, effectiveDomains);
 
   return cardsData.map((card) => ({
     title: card.title,
