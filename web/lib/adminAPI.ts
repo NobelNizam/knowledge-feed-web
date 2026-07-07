@@ -3,26 +3,26 @@ import api from './api';
 export const adminAPI = {
   getStats: async () => {
     const response = await api.get('/admin/stats/users');
-    return response.data;
+    return response;
   },
 
   togglePipeline: async (active: boolean) => {
     const response = await api.post('/admin/pipeline/status', { active });
-    return response.data;
+    return response;
   },
 
   updateFactCheckConfig: async (config: { enabled: boolean; sources: string[] }) => {
     const response = await api.post('/admin/config/fact-check', { config });
-    return response.data;
+    return response;
   },
 
   deleteFeedContent: async (id: string) => {
     const response = await api.delete(`/admin/feed/${id}`);
-    return response.data;
+    return response;
   },
 
   getReports: async () => {
     const response = await api.get('/admin/reports');
-    return response.data;
+    return response;
   }
 };

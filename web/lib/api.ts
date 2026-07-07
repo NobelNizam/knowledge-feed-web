@@ -1,5 +1,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+import type { ApiResponse } from '@/lib/types';
+
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
   // ponytail: mark the refresh call so the 401 retry loop doesn't recurse.
@@ -30,7 +32,7 @@ async function tryRefresh(): Promise<boolean> {
   return refreshInflight;
 }
 
-async function request(path: string, options: FetchOptions = {}): Promise<unknown> {
+async function request(path: string, options: FetchOptions = {}): Promise<ApiResponse> {
   let url = `${API_BASE_URL}${path}`;
   if (options.params) {
     const searchParams = new URLSearchParams();

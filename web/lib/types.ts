@@ -1,3 +1,11 @@
+export interface ApiResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+  message?: string;
+  [key: string]: any;
+}
+
 export interface UserPreferences {
   domains: string[];
   readingLevel?: string;
