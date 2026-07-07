@@ -8,10 +8,13 @@
 import { OpenAI } from 'openai';
 import prisma from '../lib/prisma';
 
-// Primary NVIDIA NIM client
+// Primary NVIDIA NIM client — timeout 3 menit karena Llama 70B inference bisa lambat
+// lewat network free-tier (Render/Vercel ke Nvidia).
 const openai = new OpenAI({
   apiKey: process.env.NVIDIA_API_KEY,
   baseURL: process.env.NVIDIA_API_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+  timeout: 3 * 60 * 1000,
+  maxRetries: 2,
 });
 
 const DEFAULT_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
