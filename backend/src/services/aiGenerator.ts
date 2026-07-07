@@ -78,10 +78,9 @@ function buildPrompt(opts: {
   }
 
   let contextPrompt = '';
-  if (context) {
-    const maxCtx = Math.max(0, maxContextChars);
-    const truncated = context.length > maxCtx
-      ? context.substring(0, maxCtx) + '\n... [dipotong karena batas panjang konteks]'
+  if (context && maxContextChars > 0) {
+    const truncated = context.length > maxContextChars
+      ? context.substring(0, maxContextChars) + '\n... [dipotong]'
       : context;
     contextPrompt = `\nKONTEKS REFERENSI:\n${truncated}\n\nINSTRUKSI: Buat konten berdasarkan konteks referensi di atas. Sertakan kutipan sumber.`;
   }
@@ -177,16 +176,15 @@ export async function generateWithRAG({
     ? effectiveDomains
     : pickRandom(effectiveDomains, 15);
 
-  const basePrompt = buildPrompt({
+  // Hitung budget konteks: bangun prompt tanpa konteks dulu, sisanya untuk RAG context
+  const promptWithoutCtx = buildPrompt({
     count,
     domainListForPrompt,
     subtopicMap: subtopicMap || null,
-    context,
+    context: '',
     maxContextChars: 0,
   });
-
-  let maxContextChars = Math.max(0, MAX_PROMPT_CHARS - basePrompt.length - 200);
-  if (maxContextChars < 0) maxContextChars = 0;
+  const maxContextChars = Math.max(0, MAX_PROMPT_CHARS - promptWithoutCtx.length - 100);
 
   const prompt = buildPrompt({
     count,
