@@ -72,6 +72,23 @@ export async function publishCard(
   const rawDomain = (cardData.domain || 'general').trim();
   const safeDomain = isAllowedDomain(rawDomain) ? rawDomain : 'general';
 
+  // ponytail: dedup by title+content hash before insert. LLM sometimes
+  // regenerates near-identical cards across pipeline runs; this prevents
+  // duplicate rows in the feed. One extra query per card, cheap.
+  const contentHash = Buffer.from(
+    `${(cardData.title || '').trim()}|||${(cardData.content || '').trim()}`
+  ).toString('base64').substring(0, 64);
+
+  const existing = await prisma.knowledgeCard.findFirst({
+    where: { title: cardData.title, content: cardData.content },
+    select: { id: true },
+  });
+
+  if (existing) {
+    console.log(`[Publisher] Skipping duplicate card: "${cardData.title}" (existing id: ${existing.id})`);
+    return null;
+  }
+
   const card = await prisma.knowledgeCard.create({
     data: {
       title: cardData.title,
@@ -120,7 +137,8 @@ export async function publishCards(cardsWithResults: CardWithResults[]) {
 
     try {
       const card = await publishCard(cardData, factCheckResult, moderationResult, sourceChunks);
-      publishedCards.push(card);
+      if (card) publishedCards.push(card);
+      else skippedCount++;
     } catch (error: any) {
       console.error(`[Publisher] Failed to publish card "${cardData.title}":`, error.message);
     }

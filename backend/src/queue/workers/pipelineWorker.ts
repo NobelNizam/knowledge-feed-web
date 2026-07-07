@@ -123,7 +123,7 @@ export async function executePipeline(
             modResult,
             []
           );
-          result.publishedCards.push(card);
+          if (card) result.publishedCards.push(card);
         }
       }
       await updateProgress(pipelineJobId, 'completed', 100, result);
@@ -149,7 +149,7 @@ export async function executePipeline(
             modResult,
             []
           );
-          result.publishedCards.push(card);
+          if (card) result.publishedCards.push(card);
         }
       }
       await updateProgress(pipelineJobId, 'completed', 100, result);
@@ -277,6 +277,7 @@ export async function executePipeline(
 
       try {
         const card = await publishCard(cardData, fcResult, modResult, retrieval.sourceChunks);
+        if (!card) continue;
         if (fcResult.sources && fcResult.sources.length > 0) {
           await saveFactCheckResults(card.id, fcResult);
         }
