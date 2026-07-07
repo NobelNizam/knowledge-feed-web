@@ -71,13 +71,14 @@ export default function Home() {
   const fetchAvailableDomains = async () => {
     try {
       const res = await knowledgeAPI.getDomains();
-      if (res.success) {
+      if (res.success && res.data?.length > 0) {
         setAvailableDomains(res.data);
+        return;
       }
     } catch (err) {
       console.error("Failed to fetch domains");
-      setAvailableDomains(['science', 'history', 'technology', 'philosophy', 'arts', 'nature']);
     }
+    setAvailableDomains(DOMAIN_LEVEL1_LIST.map((d) => d.name));
   };
 
   if (authLoading) {
