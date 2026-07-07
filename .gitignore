@@ -28,3 +28,6 @@ opencode.json
 *backend.log
 *dev-server.log
 *.log
+
+# Deployment guide
+DEPLOY_GUIDE.md
