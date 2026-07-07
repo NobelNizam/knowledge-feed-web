@@ -15,7 +15,7 @@
     "checkJs": false,
     "strict": true,
     "noImplicitAny": false,
-    "noEmit": true,
+    "outDir": "dist",
     "noFallthroughCasesInSwitch": true,
 
     "types": ["node", "jest"],

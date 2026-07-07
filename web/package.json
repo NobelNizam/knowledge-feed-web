@@ -1,6 +1,7 @@
 {
-  "name": "knowledge-feed-web",
+  "name": "BishamonFace",
   "version": "1.0.0",
+  "description": "Frontend Bishamon",
   "private": true,
   "scripts": {
     "dev": "nodemon --watch next.config.js --watch .env.local --exec \"next dev\"",
@@ -20,6 +21,9 @@
     "react-dom": "^18.2.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",

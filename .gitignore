@@ -13,6 +13,7 @@ web/.env*.local
 
 # Build files
 *.tsbuildinfo
+backend/dist/
 
 # Agents and Security Reviews
 .agents/

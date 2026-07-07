@@ -1,10 +1,11 @@
 {
-  "name": "knowledge-feed-api",
+  "name": "BishamonBack",
   "version": "1.0.0",
-  "description": "Backend API for Knowledge Feed App",
+  "description": "Backend Bishamon",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "build": "tsc --outDir dist",
+    "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "generate": "tsx src/workers/contentGenerator.ts",
     "typecheck": "tsc --noEmit",
@@ -43,6 +44,9 @@
     "ts-jest": "^29.4.11",
     "tsx": "^4.19.0",
     "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
