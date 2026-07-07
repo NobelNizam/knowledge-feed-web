@@ -134,10 +134,10 @@ export function moderateCard(card: Card): ModerationResult {
   }
 
   if (!isAllowedDomain(card.domain)) {
-    if (status !== 'blocked') status = 'review';
+    status = 'blocked';
     flags.push({
       type: 'domain',
-      severity: 'info',
+      severity: 'critical',
       details: `Domain "${card.domain}" is not in the allowed list`,
     });
   }

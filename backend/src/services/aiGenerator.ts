@@ -7,6 +7,7 @@
 
 import { OpenAI } from 'openai';
 import prisma from '../lib/prisma';
+import { getAllLevel2 } from '../services/domainHierarchy';
 
 // Primary NVIDIA NIM client — timeout 3 menit karena Llama 70B inference bisa lambat
 // lewat network free-tier (Render/Vercel ke Nvidia).
@@ -18,6 +19,18 @@ const openai = new OpenAI({
 });
 
 const DEFAULT_MODEL = process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct';
+
+const ALLOWED_DOMAINS: string[] = getAllLevel2();
+
+function fuzzyMatchDomain(raw: string, candidates: string[]): string | null {
+  const norm = raw.trim();
+  const exact = candidates.find((c) => c.toLowerCase() === norm.toLowerCase());
+  if (exact) return exact;
+  const contains = candidates.find((c) =>
+    norm.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(norm.toLowerCase())
+  );
+  return contains || null;
+}
 
 interface RAGOptions {
   count?: number;
@@ -49,9 +62,9 @@ export async function generateWithRAG({
     throw new Error('NVIDIA_API_KEY is not configured in .env');
   }
 
-  const domainPrompt = domains && domains.length > 0
-    ? `PENTING: Pilih HANYA SATU disiplin ilmu (Level 2) dari daftar ini untuk setiap kartu: ${domains.join(', ')}. Jangan menggabungkan atau memodifikasi nama disiplin tersebut!`
-    : `Pilih secara acak HANYA SATU disiplin ilmu (Level 2) akademis formal dalam Bahasa Inggris untuk setiap kartu (contoh: "Physics", "Artificial Intelligence", "Microbiology", "Astronomy", "Theoretical Computer Science", "Economics", "Psychology", "Linguistics", "Agriculture", "Philosophy", "History"). Pastikan nama disiplin ditulis dalam bahasa Inggris baku dengan huruf kapital di awal setiap kata.`;
+  const effectiveDomains = domains && domains.length > 0 ? domains : ALLOWED_DOMAINS;
+
+  const domainPrompt = `PENTING: Setiap kartu HARUS menggunakan domain "domain" yang HANYA berasal dari daftar disiplin ilmu (Level 2) berikut — PERSIS SAMA, huruf besar/kecil mengikuti aslinya: ${effectiveDomains.join(', ')}. JANGAN membuat domain baru. JANGAN menggunakan "General", "Other", atau nama domain di luar daftar ini. Setiap kartu cukup SATU domain.`;
 
   // Build sub-topic prompt jika subtopicMap tersedia (dari hierarki Level 3)
   let subtopicPrompt = '';
@@ -103,19 +116,54 @@ Pastikan Anda mematuhi struktur JSON yang valid! Jika Anda ingin menggunakan tan
     return (completion.choices[0].message.content || '').trim();
   };
 
-  const responseContent = await makeCall(DEFAULT_MODEL)();
+  const extractJSON = (text: string): string | null => {
+    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    return match ? match[0] : null;
+  };
 
-  let cardsData: RawCard[];
-  try {
-    const match = responseContent.match(/\[[\s\S]*\]/);
-    if (!match) {
-      throw new Error('No JSON array found in response');
+  const parseCards = (text: string): RawCard[] | null => {
+    const jsonStr = extractJSON(text);
+    if (!jsonStr) return null;
+    try {
+      return JSON.parse(jsonStr);
+    } catch {
+      try {
+        const repaired = jsonStr.replace(/(?<!\\)"([^"]*)"/g, (m, inner) => {
+          return `"${inner.replace(/"/g, '\\"')}"`;
+        });
+        return JSON.parse(repaired);
+      } catch {
+        return null;
+      }
     }
-    cardsData = JSON.parse(match[0]);
-  } catch (e) {
-    console.error('[AIGenerator] Failed to parse response as JSON:', responseContent);
+  };
+
+  let responseContent = await makeCall(DEFAULT_MODEL)();
+  let cardsData = parseCards(responseContent);
+
+  if (!cardsData) {
+    console.error('[AIGenerator] First attempt failed to parse. Retrying...');
+    responseContent = await makeCall(DEFAULT_MODEL)();
+    cardsData = parseCards(responseContent);
+  }
+
+  if (!cardsData) {
+    console.error('[AIGenerator] All parse attempts failed. Raw:', responseContent.substring(0, 500));
     throw new Error('Invalid JSON format from AI');
   }
+
+  cardsData = cardsData.map((card) => {
+    let domain = card.domain || effectiveDomains[0];
+    const match = fuzzyMatchDomain(domain, effectiveDomains);
+    if (!match) {
+      console.warn(`[AIGenerator] Domain "${domain}" not in allowed list, replacing with "${effectiveDomains[0]}"`);
+      domain = effectiveDomains[0];
+    } else {
+      domain = match;
+    }
+    return { ...card, domain };
+  });
 
   return cardsData.map((card) => ({
     title: card.title,
