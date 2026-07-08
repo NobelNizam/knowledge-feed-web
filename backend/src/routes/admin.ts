@@ -36,13 +36,16 @@ router.get('/stats/users', async (_req: Request, res: Response) => {
 
 // 4. Menghapus konten feed tertentu
 router.delete('/feed/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
   try {
-    const card = await prisma.knowledgeCard.findUnique({ where: { id }, select: { domain: true } });
+    const card = await prisma.knowledgeCard.findUnique({
+      where: { id },
+      select: { domainId: true, domain: { select: { name: true } } },
+    });
     if (!card) return res.status(404).json({ error: 'Content not found' });
 
     await prisma.knowledgeCard.delete({ where: { id } });
-    await invalidateDomainCache(card.domain);
+    await invalidateDomainCache(card.domain.name);
 
     res.json({ success: true, message: 'Content deleted successfully' });
   } catch (error) {
@@ -55,21 +58,21 @@ router.get('/reports', async (_req: Request, res: Response) => {
   try {
     const reports = await prisma.report.findMany({
       include: {
-        user: { select: { id: true, name: true, email: true } },
-        card: { select: { id: true, title: true, domain: true, dislikeCount: true } },
+        reporter: { select: { id: true, displayName: true, email: true } },
+        reportedPost: { select: { id: true, title: true, domainId: true, dislikeCount: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     const data = reports.map((r) => ({
       id: r.id,
-      cardId: r.cardId,
-      cardTitle: r.card.title,
-      cardDomain: r.card.domain,
-      cardDislikeCount: r.card.dislikeCount,
-      reporterName: r.user.name,
-      reporterEmail: r.user.email,
-      reasons: r.reasons,
+      cardId: r.reportedPostId,
+      cardTitle: r.reportedPost?.title,
+      cardDomain: r.reportedPost?.domainId,
+      cardDislikeCount: r.reportedPost?.dislikeCount,
+      reporterName: r.reporter?.displayName,
+      reporterEmail: r.reporter?.email,
+      reason: r.reason,
       createdAt: r.createdAt,
     }));
 
@@ -82,7 +85,7 @@ router.get('/reports', async (_req: Request, res: Response) => {
 
 // 6. Dismiss report
 router.delete('/reports/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id, 10);
   try {
     await prisma.report.delete({ where: { id } });
     res.json({ success: true, message: 'Report dismissed' });
@@ -91,4 +94,4 @@ router.delete('/reports/:id', async (req: Request, res: Response) => {
   }
 });
 
-export = router;
+export default router;

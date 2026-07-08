@@ -13,7 +13,6 @@ interface CardData {
   title: string;
   content: string;
   domain?: string;
-  tags?: string[];
   type?: string;
   aiModel?: string;
   sourceName?: string;
@@ -48,7 +47,9 @@ export async function publishCard(
   moderationResult: ModerationResult,
   sourceChunks: SourceChunk[] = []
 ) {
-  // Build citations from source chunks
+  const rawDomain = (cardData.domain || 'general').trim();
+  const safeDomain = isAllowedDomain(rawDomain) ? rawDomain : 'general';
+
   const citations = sourceChunks
     .filter((c) => c.sourceTitle)
     .reduce<any[]>((acc, chunk) => {
@@ -65,20 +66,6 @@ export async function publishCard(
       return acc;
     }, []);
 
-  // ponytail: validate the LLM-produced domain against the allowlist before
-  // it ever reaches the DB. The LLM is told to pick from a fixed list, but
-  // it sometimes drifts; an unvalidated domain would pollute the domain
-  // cache keyspace (`feed:domain:*`) and break the filter panel.
-  const rawDomain = (cardData.domain || 'general').trim();
-  const safeDomain = isAllowedDomain(rawDomain) ? rawDomain : 'general';
-
-  // ponytail: dedup by title+content hash before insert. LLM sometimes
-  // regenerates near-identical cards across pipeline runs; this prevents
-  // duplicate rows in the feed. One extra query per card, cheap.
-  const contentHash = Buffer.from(
-    `${(cardData.title || '').trim()}|||${(cardData.content || '').trim()}`
-  ).toString('base64').substring(0, 64);
-
   const existing = await prisma.knowledgeCard.findFirst({
     where: { title: cardData.title, content: cardData.content },
     select: { id: true },
@@ -89,12 +76,16 @@ export async function publishCard(
     return null;
   }
 
+  let domain = await prisma.domain.findUnique({ where: { name: safeDomain } });
+  if (!domain) {
+    domain = await prisma.domain.create({ data: { name: safeDomain } });
+  }
+
   const card = await prisma.knowledgeCard.create({
     data: {
       title: cardData.title,
       content: cardData.content,
-      domain: safeDomain,
-      tags: cardData.tags || [],
+      domainId: domain.id,
       type: cardData.type || 'QUICK_FACT',
       aiModel: cardData.aiModel || process.env.NVIDIA_MODEL || 'unknown',
       sourceName: cardData.sourceName || 'AI Generated (RAG)',

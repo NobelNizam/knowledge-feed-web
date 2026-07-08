@@ -24,7 +24,7 @@ function Topbar() {
         {user ? (
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-foreground hidden sm:inline-block">
-              Halo, {user.name}
+              Halo, {user.displayName}
             </span>
             <button 
               onClick={logout}

@@ -6,9 +6,13 @@ import { useRouter } from 'next/navigation';
 import type { UserPreferences, CardData } from './types';
 
 export interface User {
-  id: string;
-  name: string;
+  id: number;
+  displayName: string;
+  username: string;
   email: string;
+  bio?: string;
+  readingLevel?: string;
+  dailyDigest?: boolean;
   role: 'USER' | 'ADMIN';
   preferences?: UserPreferences;
   savedCards?: CardData[];

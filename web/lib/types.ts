@@ -12,10 +12,12 @@ export interface UserPreferences {
 }
 
 export interface CardData {
-  id: string;
+  id: number;
   title: string;
   content: string;
-  domain: string;
+  domain?: string;
+  domainId?: number;
+  domainName?: string;
   tags?: string[];
   sourceUrl?: string;
   sourceName?: string;
@@ -34,22 +36,22 @@ export interface CardData {
 export type CardUpdate = Partial<CardData>;
 
 export interface CommentData {
-  id: string;
+  id: number;
   content: string;
   createdAt: string;
   user?: { name: string };
   replies?: CommentData[];
-  parentId?: string;
+  parentId?: number;
 }
 
 export interface ReportData {
-  id: string;
-  cardId: string;
-  cardTitle: string;
-  cardDomain: string;
-  cardDislikeCount: number;
+  id: number;
+  reportedPostId: number;
+  cardTitle?: string;
   reporterName: string;
-  reporterEmail: string;
-  reasons: string[];
+  reason: string;
+  description?: string;
+  status: string;
+  resolvedAt?: string;
   createdAt: string;
 }

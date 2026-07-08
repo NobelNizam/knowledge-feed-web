@@ -38,7 +38,7 @@ export default function Profile() {
               {user.avatarUrl ? user.avatarUrl : '👤'}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.displayName}</h1>
               <p className="text-muted-foreground text-sm">{user.email}</p>
             </div>
           </div>

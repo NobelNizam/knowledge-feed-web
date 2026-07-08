@@ -16,7 +16,7 @@ export const adminAPI = {
     return response;
   },
 
-  deleteFeedContent: async (id: string) => {
+  deleteFeedContent: async (id: number) => {
     const response = await api.delete(`/admin/feed/${id}`);
     return response;
   },
@@ -26,7 +26,7 @@ export const adminAPI = {
     return response;
   },
 
-  dismissReport: async (id: string) => {
+  dismissReport: async (id: number) => {
     const response = await api.delete(`/admin/reports/${id}`);
     return response;
   }

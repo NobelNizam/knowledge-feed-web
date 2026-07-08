@@ -30,7 +30,7 @@ export default function ProfileSettings() {
     if (!authLoading && !user) {
       router.push('/login');
     } else if (user) {
-      setName(user.name || '');
+      setName(user.displayName || '');
       setSelectedAvatar(user.avatarUrl || '👤');
       setSelectedDomains(user.preferences?.domains || []);
     }

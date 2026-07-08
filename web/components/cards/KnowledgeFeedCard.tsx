@@ -12,10 +12,12 @@ import { updateCardInCache } from '@/lib/cache';
 
 export interface KnowledgeFeedCardProps {
   card: {
-    id: string;
+    id: number;
     title: string;
     content: string;
-    domain: string;
+    domain?: string;
+    domainId?: number;
+    domainName?: string;
     tags?: string[];
     sourceUrl?: string;
     sourceName?: string;
@@ -78,7 +80,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   const [showShareModal, setShowShareModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const parentDomain = getParentDomain(card.domain);
+  const parentDomain = getParentDomain(card.domain || card.domainName || '');
   const domainColor = DOMAIN_COLORS[parentDomain] || 'bg-neutral-500';
   const domainIcon = DOMAIN_ICONS[parentDomain] || '📚';
   
@@ -299,7 +301,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
         {/* Header: domain badge + domain icon + date */}
         <div className="flex items-center gap-2 w-full">
           <span className={cn('px-2 py-0.5 text-xs font-bold text-white rounded-full relative z-10 shrink-0', domainColor)}>
-            {card.domain?.toUpperCase()}
+            {(card.domain || card.domainName)?.toUpperCase()}
           </span>
           <div className="ml-auto flex items-center gap-2 text-muted-foreground">
             <span className="text-lg leading-none">{domainIcon}</span>
@@ -469,7 +471,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
 
 const REPORT_REASONS = ['tidak akurat', 'bahasanya jelek', 'duplikat', 'error', 'tidak pantas'];
 
-function ReportModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
+function ReportModal({ cardId, onClose }: { cardId: number; onClose: () => void }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
 
@@ -480,7 +482,7 @@ function ReportModal({ cardId, onClose }: { cardId: string; onClose: () => void 
   const handleSubmit = async () => {
     if (selected.length === 0) return;
     try {
-      await interactionAPI.reportCard(cardId, selected);
+      await interactionAPI.reportCard(cardId, selected.join(', '));
       setSubmitted(true);
     } catch (err) {
       console.error('Report failed:', err);

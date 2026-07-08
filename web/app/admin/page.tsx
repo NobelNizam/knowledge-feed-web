@@ -15,7 +15,7 @@ export default function AdminDashboard() {
   const [reports, setReports] = useState<ReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,11 +49,11 @@ export default function AdminDashboard() {
     if (!deleteId) return;
     setIsSubmitting(true);
     try {
-      const res = await adminAPI.deleteFeedContent(deleteId);
+      const numId = Number(deleteId);
+      const res = await adminAPI.deleteFeedContent(numId);
       if (res.success) {
         alert(res.message);
         setDeleteId('');
-        // refresh reports
         const reportsRes = await adminAPI.getReports();
         if (reportsRes.success) setReports(reportsRes.data);
       }
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDismissReport = async (reportId: string) => {
+  const handleDismissReport = async (reportId: number) => {
     setActionLoading(reportId);
     try {
       await adminAPI.dismissReport(reportId);
@@ -76,11 +76,11 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteFromReport = async (cardId: string, reportId: string) => {
+  const handleDeleteFromReport = async (cardId: number, reportId: number) => {
     setActionLoading(reportId);
     try {
       await adminAPI.deleteFeedContent(cardId);
-      setReports((prev) => prev.filter((r) => r.cardId !== cardId));
+      setReports((prev) => prev.filter((r) => r.reportedPostId !== cardId));
     } catch (err) {
       alert("Failed to delete content");
     } finally {
@@ -200,12 +200,11 @@ export default function AdminDashboard() {
                       <div key={r.id} className="p-4 hover:bg-muted/30 transition-colors">
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="min-w-0">
-                            <Link href={`/card/${r.cardId}`} className="text-sm font-bold text-foreground hover:text-primary truncate block">
+                            <Link href={`/card/${r.reportedPostId}`} className="text-sm font-bold text-foreground hover:text-primary truncate block">
                               {r.cardTitle}
                             </Link>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              by {r.reporterName} &middot; {r.cardDomain}
-                              {r.cardDislikeCount > 0 && <span className="ml-1"> &middot; {r.cardDislikeCount} dislikes</span>}
+                              by {r.reporterName} &middot; {r.reason}
                             </p>
                           </div>
                           <span className="text-xs text-muted-foreground shrink-0">
@@ -213,14 +212,14 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5 mb-3">
-                          {r.reasons.map((reason) => (
-                            <span key={reason} className="px-2 py-0.5 text-xs font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full">
-                              {reason}
+                          {r.reason && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full">
+                              {r.reason}
                             </span>
-                          ))}
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground mr-1 font-mono">ID: {r.cardId}</span>
+                          <span className="text-xs text-muted-foreground mr-1 font-mono">ID: {r.reportedPostId}</span>
                           <button
                             onClick={() => handleDismissReport(r.id)}
                             disabled={actionLoading === r.id}
@@ -229,7 +228,7 @@ export default function AdminDashboard() {
                             {actionLoading === r.id ? '...' : 'Dismiss'}
                           </button>
                           <button
-                            onClick={() => handleDeleteFromReport(r.cardId, r.id)}
+                            onClick={() => handleDeleteFromReport(r.reportedPostId, r.id)}
                             disabled={actionLoading === r.id}
                             className="px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
                           >

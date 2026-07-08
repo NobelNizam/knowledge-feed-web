@@ -35,7 +35,7 @@ const setTokenCookie = (req: Request, res: Response, token: string, isRefresh = 
   });
 };
 
-async function generateTokens(userId: string, role: string, req: Request) {
+async function generateTokens(userId: number, role: string, req: Request) {
   const accessToken = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '15m' });
   const uniqueId = crypto.randomBytes(16).toString('hex');
   const refreshToken = jwt.sign({ userId, role, jti: uniqueId }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
@@ -47,9 +47,10 @@ async function generateTokens(userId: string, role: string, req: Request) {
     data: {
       userId,
       refreshToken: hashRefreshToken(refreshToken),
-      userAgent: req.headers['user-agent'] || null,
+      deviceInfo: req.headers['user-agent'] || null,
       ipAddress: req.ip || null,
       expiresAt,
+      isRevoked: false,
     },
   });
 
@@ -58,9 +59,9 @@ async function generateTokens(userId: string, role: string, req: Request) {
 
 router.post('/register', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { username, name, email, password } = req.body || {};
 
-    if (!name || !email || !password) {
+    if (!username || !name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
@@ -78,16 +79,21 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email already in use' });
     }
 
+    const existingUsername = await prisma.user.findUnique({ where: { username } });
+    if (existingUsername) {
+      return res.status(400).json({ error: 'Username already in use' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        name,
+        username,
+        displayName: name,
         email,
-        password: hashedPassword,
-        preferences: { create: { domains: [] } },
+        passwordHash: hashedPassword,
       },
-      select: { id: true, name: true, email: true, role: true, preferences: true },
+      select: { id: true, username: true, displayName: true, email: true, role: true, readingLevel: true, dailyDigest: true },
     });
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
@@ -114,12 +120,12 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email }, include: { preferences: true } });
+    const user = await prisma.user.findUnique({ where: { email }, include: { followedDomains: true } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -128,15 +134,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     setTokenCookie(req, res, accessToken, false);
     setTokenCookie(req, res, refreshToken, true);
 
-    let userPreferences = user.preferences;
-    if (!userPreferences) {
-      userPreferences = await prisma.userPreferences.create({
-        data: { userId: user.id, domains: [] },
-      });
-    }
-
-    const { password: _pw, ...userWithoutPassword } = user;
-    userWithoutPassword.preferences = userPreferences;
+    const { passwordHash: _pw, ...userWithoutPassword } = user;
     res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error('Login error:', error);
@@ -171,7 +169,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as { userId: string; role: string };
+    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as { userId: number; role: string };
     const session = await prisma.session.findUnique({
       where: { refreshToken: hashRefreshToken(refreshToken) },
     });
@@ -201,47 +199,44 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { preferences: true, savedCards: true },
+      include: { followedDomains: true, bookmarks: { include: { post: true } } },
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (!user.preferences) {
-      user.preferences = await prisma.userPreferences.create({
-        data: { userId: user.id, domains: [] },
-      });
-    }
+    const { passwordHash, bookmarks: userBookmarks, ...cleanUser } = user;
+    const bookmarkedPosts = userBookmarks.map((b) => b.post);
 
-    const { password, ...userWithoutPassword } = user;
-
-    if (user.savedCards && user.savedCards.length > 0) {
-      const cardIds = user.savedCards.map((c) => c.id);
-      const [likes, userLikes, comments] = await Promise.all([
-        prisma.like.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } }),
-        prisma.like.findMany({ where: { userId: user.id, cardId: { in: cardIds } } }),
-        prisma.comment.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } }),
+    if (bookmarkedPosts.length > 0) {
+      const postIds = bookmarkedPosts.map((c) => c.id);
+      const [reactions, userReactions, comments] = await Promise.all([
+        prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: postIds }, reactionType: 'LIKE' }, _count: { id: true } }),
+        prisma.reaction.findMany({ where: { userId: user.id, postId: { in: postIds }, reactionType: 'LIKE' } }),
+        prisma.comment.groupBy({ by: ['postId'], where: { postId: { in: postIds } }, _count: { id: true } }),
       ]);
 
-      const likesMap = Object.fromEntries(likes.map((l) => [l.cardId, l._count.id]));
-      const likedSet = new Set(userLikes.map((ul) => ul.cardId));
-      const commentsMap = Object.fromEntries(comments.map((c) => [c.cardId, c._count.id]));
+      const likesMap = Object.fromEntries(reactions.map((l) => [l.postId, l._count.id]));
+      const likedSet = new Set(userReactions.map((ul) => ul.postId));
+      const commentsMap = Object.fromEntries(comments.map((c) => [c.postId, c._count.id]));
 
-      userWithoutPassword.savedCards = user.savedCards.map((row) => ({
+      const enriched = bookmarkedPosts.map((row) => ({
         ...row,
         likeCount: likesMap[row.id] || 0,
         liked: likedSet.has(row.id),
         saved: true,
         commentsCount: commentsMap[row.id] || 0,
       }));
-    }
 
-    res.json({ success: true, data: userWithoutPassword });
+      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: enriched } });
+    } else {
+      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: [] } });
+    }
   } catch (error) {
     console.error('Fetch me error:', error);
     res.status(500).json({ error: 'Failed to fetch user data' });
   }
 });
 
-export = router;
+export default router;

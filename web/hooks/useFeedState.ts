@@ -9,7 +9,7 @@ import type { ActiveFilter } from '@/lib/FilterContext';
 
 export interface TabFeedState {
   cards: CardData[];
-  seenIds: string[];
+  seenIds: number[];
   offset: number;
   hasMore: boolean;
   scrollPosition: number;

@@ -46,18 +46,31 @@ router.get('/search', async (req: Request, res: Response) => {
     const { q, domain } = req.query;
     const limit = clampLimit(req.query.limit);
 
+    let domainId: number | undefined;
+    if (domain) {
+      const domainRow = await prisma.domain.findUnique({
+        where: { name: String(domain) },
+        select: { id: true },
+      });
+      domainId = domainRow?.id;
+    }
+
     const cards = await prisma.knowledgeCard.findMany({
       where: {
         AND: [
           q ? { title: { contains: String(q), mode: 'insensitive' } } : {},
-          domain ? { domain: String(domain) } : {},
+          domain ? { domainId: domainId ?? -1 } : {},
         ],
       },
+      include: { domain: { select: { name: true } } },
       take: limit,
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: cards });
+    res.json({
+      success: true,
+      data: cards.map((c) => ({ ...c, domain: c.domain?.name ?? c.domain })),
+    });
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Failed to search cards' });
@@ -74,11 +87,15 @@ router.get('/trending', async (req: Request, res: Response) => {
 
     const cards = await prisma.knowledgeCard.findMany({
       where: { createdAt: { gte: weekAgo } },
+      include: { domain: { select: { name: true } } },
       orderBy: { engagementScore: 'desc' },
       take: limit,
     });
 
-    res.json({ success: true, data: cards });
+    res.json({
+      success: true,
+      data: cards.map((c) => ({ ...c, domain: c.domain?.name ?? c.domain })),
+    });
   } catch (error) {
     console.error('Trending error:', error);
     res.status(500).json({ error: 'Failed to fetch trending cards' });
@@ -88,12 +105,18 @@ router.get('/trending', async (req: Request, res: Response) => {
 // GET /api/knowledge/domains
 router.get('/domains', async (_req: Request, res: Response) => {
   try {
-    const domains = await prisma.knowledgeCard.groupBy({
-      by: ['domain'],
+    const domainGroups = await prisma.knowledgeCard.groupBy({
+      by: ['domainId'],
       _count: { id: true },
     });
 
-    res.json({ success: true, data: domains.map((d) => d.domain) });
+    const domainIds = domainGroups.map((d) => d.domainId);
+    const domains = await prisma.domain.findMany({
+      where: { id: { in: domainIds } },
+      select: { name: true },
+    });
+
+    res.json({ success: true, data: domains.map((d) => d.name) });
   } catch (error) {
     console.error('Domains error:', error);
     res.status(500).json({ error: 'Failed to fetch domains' });
@@ -103,9 +126,11 @@ router.get('/domains', async (_req: Request, res: Response) => {
 // GET /api/knowledge/tags
 router.get('/tags', async (_req: Request, res: Response) => {
   try {
-    const cards = await prisma.knowledgeCard.findMany({ select: { tags: true } });
-    const allTags = Array.from(new Set(cards.flatMap((c) => c.tags || [])));
-    res.json({ success: true, data: allTags });
+    const hashtags = await prisma.hashtag.findMany({
+      select: { name: true },
+      distinct: ['name'],
+    });
+    res.json({ success: true, data: hashtags.map((h) => h.name) });
   } catch (error) {
     console.error('Tags error:', error);
     res.status(500).json({ error: 'Failed to fetch tags' });
@@ -116,10 +141,8 @@ router.get('/tags', async (_req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const postId = parseInt(id, 10);
 
-    // ponytail: parallelize the 3 interaction counts + user lookup. Was 4
-    // sequential queries; now one round trip. Upgrade path: denormalize
-    // likeCount/commentsCount on KnowledgeCard to drop these counts entirely.
     let userId: string | null = null;
     const token = req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
     if (token) {
@@ -129,35 +152,40 @@ router.get('/:id', async (req: Request, res: Response) => {
         // ignore
       }
     }
+    const userIdNum = userId ? parseInt(userId, 10) : undefined;
 
     const queries: any[] = [
-      prisma.knowledgeCard.findUnique({ where: { id } }),
-      prisma.like.count({ where: { cardId: id } }),
-      prisma.comment.count({ where: { cardId: id } }),
-      prisma.dislike.count({ where: { cardId: id } }),
+      prisma.knowledgeCard.findUnique({
+        where: { id: postId },
+        include: {
+          domain: { select: { name: true } },
+          postHashtags: { include: { hashtag: { select: { name: true } } } },
+        },
+      }),
+      prisma.reaction.count({ where: { postId, reactionType: 'LIKE' } }),
+      prisma.comment.count({ where: { postId, isDeleted: false } }),
+      prisma.reaction.count({ where: { postId, reactionType: 'DISLIKE' } }),
     ];
-    if (userId) {
-      queries.push(prisma.like.count({ where: { userId, cardId: id } }));
-      queries.push(prisma.dislike.count({ where: { userId, cardId: id } }));
-      queries.push(
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { savedCards: { where: { id }, select: { id: true } } },
-        })
-      );
+    if (userIdNum) {
+      queries.push(prisma.reaction.count({ where: { userId: userIdNum, postId, reactionType: 'LIKE' } }));
+      queries.push(prisma.reaction.count({ where: { userId: userIdNum, postId, reactionType: 'DISLIKE' } }));
+      queries.push(prisma.bookmark.findFirst({ where: { userId: userIdNum, postId }, select: { id: true } }));
     }
 
-    const [card, likeCount, commentsCount, dislikeCount, userLikeCount, userDislikeCount, user] = await Promise.all(queries);
+    const [card, likeCount, commentsCount, dislikeCount, userLikeCount, userDislikeCount, bookmark] =
+      await Promise.all(queries);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const liked = userId ? userLikeCount > 0 : false;
-    const disliked = userId ? userDislikeCount > 0 : false;
-    const saved = userId ? (user?.savedCards?.length || 0) > 0 : false;
+    const liked = userIdNum ? userLikeCount > 0 : false;
+    const disliked = userIdNum ? userDislikeCount > 0 : false;
+    const saved = userIdNum ? !!bookmark : false;
 
     res.json({
       success: true,
       data: {
         ...card,
+        domain: card.domain?.name ?? card.domain ?? '',
+        tags: card.postHashtags?.map((ph: any) => ph.hashtag?.name).filter(Boolean) ?? [],
         likeCount,
         dislikeCount,
         liked,
@@ -173,16 +201,16 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-async function updateEngagementScore(cardId: string) {
+async function updateEngagementScore(postId: number) {
   try {
     const [card, likesCount, dislikesCount, commentsCount] = await Promise.all([
       prisma.knowledgeCard.findUnique({
-        where: { id: cardId },
+        where: { id: postId },
         select: { viewCount: true, shareCount: true },
       }),
-      prisma.like.count({ where: { cardId } }),
-      prisma.dislike.count({ where: { cardId } }),
-      prisma.comment.count({ where: { cardId } }),
+      prisma.reaction.count({ where: { postId, reactionType: 'LIKE' } }),
+      prisma.reaction.count({ where: { postId, reactionType: 'DISLIKE' } }),
+      prisma.comment.count({ where: { postId, isDeleted: false } }),
     ]);
 
     if (!card) return;
@@ -191,7 +219,7 @@ async function updateEngagementScore(cardId: string) {
       likesCount * 3 + dislikesCount * -3 + commentsCount * 5 + card.viewCount * 1 + card.shareCount * 4;
 
     await prisma.knowledgeCard.update({
-      where: { id: cardId },
+      where: { id: postId },
       data: { engagementScore },
     });
   } catch (error) {
@@ -202,30 +230,32 @@ async function updateEngagementScore(cardId: string) {
 // POST /api/knowledge/:id/like
 router.post('/:id/like', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
-    const userId = req.user!.userId;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
+    const userIdNum = parseInt(String(req.user!.userId), 10);
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const existingLike = await prisma.like.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+    const existingLike = await prisma.reaction.findFirst({
+      where: { userId: userIdNum, postId, reactionType: 'LIKE' },
     });
 
     let liked = false;
     if (existingLike) {
-      await prisma.like.delete({ where: { id: existingLike.id } });
+      await prisma.reaction.delete({ where: { id: existingLike.id } });
     } else {
-      await prisma.like.create({ data: { userId, cardId } });
+      await prisma.reaction.deleteMany({
+        where: { userId: userIdNum, postId, reactionType: 'DISLIKE' },
+      });
+      await prisma.reaction.create({
+        data: { userId: userIdNum, postId, reactionType: 'LIKE' },
+      });
       liked = true;
     }
 
-    const likeCount = await prisma.like.count({ where: { cardId } });
-    await prisma.knowledgeCard.update({
-      where: { id: cardId },
-      data: { likeCount },
-    });
-    await updateEngagementScore(cardId);
+    const likeCount = await prisma.reaction.count({ where: { postId, reactionType: 'LIKE' } });
+    await updateEngagementScore(postId);
 
     res.json({ success: true, liked, likeCount });
   } catch (error) {
@@ -237,7 +267,8 @@ router.post('/:id/like', authMiddleware, async (req: Request, res: Response) => 
 // POST /api/knowledge/:id/view
 router.post('/:id/view', async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
 
     let userId: string | null = null;
     const token = req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
@@ -248,33 +279,34 @@ router.post('/:id/view', async (req: Request, res: Response) => {
         // ignore
       }
     }
+    const userIdNum = userId ? parseInt(userId, 10) : undefined;
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     let isNewUniqueView = false;
 
-    if (userId) {
-      const existingView = await prisma.view.findUnique({
-        where: { userId_cardId: { userId, cardId } },
+    if (userIdNum) {
+      const existingView = await prisma.postView.findUnique({
+        where: { userId_postId: { userId: userIdNum, postId } },
       });
 
       if (!existingView) {
-        await prisma.view.create({ data: { userId, cardId } });
+        await prisma.postView.create({ data: { userId: userIdNum, postId } });
         isNewUniqueView = true;
       }
     } else {
       const fingerprint = { ip: req.ip, ua: req.headers['user-agent'] };
-      isNewUniqueView = await markAnonymousViewIfNew(fingerprint, cardId);
+      isNewUniqueView = await markAnonymousViewIfNew(fingerprint, id);
     }
 
     let updatedCard = card;
     if (isNewUniqueView) {
       updatedCard = await prisma.knowledgeCard.update({
-        where: { id: cardId },
+        where: { id: postId },
         data: { viewCount: { increment: 1 } },
       });
-      await updateEngagementScore(cardId);
+      await updateEngagementScore(postId);
     }
 
     res.json({ success: true, viewCount: updatedCard.viewCount });
@@ -287,17 +319,18 @@ router.post('/:id/view', async (req: Request, res: Response) => {
 // POST /api/knowledge/:id/share
 router.post('/:id/share', async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     const updatedCard = await prisma.knowledgeCard.update({
-      where: { id: cardId },
+      where: { id: postId },
       data: { shareCount: { increment: 1 } },
     });
 
-    await updateEngagementScore(cardId);
+    await updateEngagementScore(postId);
 
     res.json({ success: true, shareCount: updatedCard.shareCount });
   } catch (error) {
@@ -309,55 +342,54 @@ router.post('/:id/share', async (req: Request, res: Response) => {
 // POST /api/knowledge/:id/dislike
 router.post('/:id/dislike', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
-    const userId = req.user!.userId;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
+    const userIdNum = parseInt(String(req.user!.userId), 10);
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const existingDislike = await prisma.dislike.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+    const existingDislike = await prisma.reaction.findFirst({
+      where: { userId: userIdNum, postId, reactionType: 'DISLIKE' },
     });
 
     let disliked = false;
     if (existingDislike) {
-      await prisma.dislike.delete({ where: { id: existingDislike.id } });
+      await prisma.reaction.delete({ where: { id: existingDislike.id } });
     } else {
       // mutual exclusive: auto-hapus like
-      const existingLike = await prisma.like.findUnique({
-        where: { userId_cardId: { userId, cardId } },
+      await prisma.reaction.deleteMany({
+        where: { userId: userIdNum, postId, reactionType: 'LIKE' },
       });
-      if (existingLike) {
-        await prisma.like.delete({ where: { id: existingLike.id } });
-      }
 
-      await prisma.dislike.create({ data: { userId, cardId } });
+      await prisma.reaction.create({
+        data: { userId: userIdNum, postId, reactionType: 'DISLIKE' },
+      });
       disliked = true;
 
       // auto-flag: dislike pertama → system report "tidak disukai"
-      const dislikeCount = await prisma.dislike.count({ where: { cardId } });
+      const dislikeCount = await prisma.reaction.count({ where: { postId, reactionType: 'DISLIKE' } });
       if (dislikeCount === 1) {
         const sysUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
         if (sysUser) {
-          await prisma.report.upsert({
-            where: { userId_cardId: { userId: sysUser.id, cardId } },
-            create: { userId: sysUser.id, cardId, reasons: ['tidak disukai'] },
-            update: {},
+          await prisma.report.create({
+            data: {
+              reporterUserId: sysUser.id,
+              reportedPostId: postId,
+              reason: 'tidak disukai',
+              status: 'pending',
+            },
           });
         }
       }
     }
 
     const [likeCount, dislikeCount] = await Promise.all([
-      prisma.like.count({ where: { cardId } }),
-      prisma.dislike.count({ where: { cardId } }),
+      prisma.reaction.count({ where: { postId, reactionType: 'LIKE' } }),
+      prisma.reaction.count({ where: { postId, reactionType: 'DISLIKE' } }),
     ]);
 
-    await prisma.knowledgeCard.update({
-      where: { id: cardId },
-      data: { dislikeCount },
-    });
-    await updateEngagementScore(cardId);
+    await updateEngagementScore(postId);
 
     res.json({ success: true, disliked, dislikeCount, likeCount });
   } catch (error) {
@@ -369,25 +401,36 @@ router.post('/:id/dislike', authMiddleware, async (req: Request, res: Response) 
 // POST /api/knowledge/:id/report
 router.post('/:id/report', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
-    const userId = req.user!.userId;
-    const { reasons } = req.body || {};
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
+    const userIdNum = parseInt(String(req.user!.userId), 10);
+    const { reasons, reason, description } = req.body || {};
 
-    if (!reasons || !Array.isArray(reasons) || reasons.length === 0) {
+    // ponytail: accept either single reason or legacy reasons array, pick first
+    const reportReason =
+      reason
+      || (Array.isArray(reasons) && reasons.length > 0 ? reasons[0] : null);
+
+    if (!reportReason) {
       return res.status(400).json({ error: 'Minimal satu alasan report diperlukan' });
     }
 
-    const validReasons = ['tidak akurat', 'bahasanya jelek', 'duplikat', 'error', 'tidak pantas'];
-    const filtered = reasons.filter((r: string) => validReasons.includes(r));
-    if (filtered.length === 0) {
+    const validReasons = ['tidak akurat', 'bahasanya jelek', 'duplikat', 'error', 'tidak pantas', 'tidak disukai'];
+    if (!validReasons.includes(reportReason)) {
       return res.status(400).json({ error: 'Alasan report tidak valid' });
     }
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     const report = await prisma.report.create({
-      data: { userId, cardId, reasons: filtered },
+      data: {
+        reporterUserId: userIdNum,
+        reportedPostId: postId,
+        reason: reportReason,
+        description: description || null,
+        status: 'pending',
+      },
     });
 
     res.json({ success: true, data: report });
@@ -400,13 +443,15 @@ router.post('/:id/report', authMiddleware, async (req: Request, res: Response) =
 // GET /api/knowledge/:id/comments
 router.get('/:id/comments', async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
 
     const comments = await prisma.comment.findMany({
-      where: { cardId, parentId: null },
+      where: { postId, parentId: null, isDeleted: false },
       include: {
         user: { select: { id: true, name: true } },
         replies: {
+          where: { isDeleted: false },
           include: { user: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'asc' },
         },
@@ -424,28 +469,34 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
 // POST /api/knowledge/:id/comments
 router.post('/:id/comments', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { id: cardId } = req.params;
-    const userId = req.user!.userId;
+    const { id } = req.params;
+    const postId = parseInt(id, 10);
+    const userIdNum = parseInt(String(req.user!.userId), 10);
     const { text, parentId } = req.body || {};
 
     if (!text || text.trim() === '') {
       return res.status(400).json({ error: 'Comment content is required' });
     }
 
-    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: postId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     if (parentId) {
-      const parentComment = await prisma.comment.findUnique({ where: { id: parentId } });
+      const parentComment = await prisma.comment.findUnique({ where: { id: parseInt(String(parentId), 10) } });
       if (!parentComment) return res.status(404).json({ error: 'Parent comment not found' });
     }
 
     const comment = await prisma.comment.create({
-      data: { content: text, userId, cardId, parentId: parentId || null },
+      data: {
+        content: text,
+        userId: userIdNum,
+        postId,
+        parentId: parentId ? parseInt(String(parentId), 10) : null,
+      },
       include: { user: { select: { id: true, name: true } } },
     });
 
-    await updateEngagementScore(cardId);
+    await updateEngagementScore(postId);
 
     res.json({ success: true, data: comment });
   } catch (error) {
@@ -454,4 +505,4 @@ router.post('/:id/comments', authMiddleware, async (req: Request, res: Response)
   }
 });
 
-export = router;
+export default router;

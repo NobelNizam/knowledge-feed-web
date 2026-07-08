@@ -7,7 +7,8 @@ import { authAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function Register() {
-  const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -37,7 +38,7 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
-      const res = await authAPI.register({ name, email, password });
+      const res = await authAPI.register({ displayName, username, email, password });
       if (res.success) {
         login(res.user);
         router.push('/');
@@ -70,8 +71,19 @@ export default function Register() {
               type="text"
               required
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-foreground mb-2">Username</label>
+            <input
+              type="text"
+              required
+              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={isSubmitting}
             />
           </div>

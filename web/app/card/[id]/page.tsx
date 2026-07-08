@@ -19,24 +19,25 @@ export default function CardDetail({ params }: { params: { id: string } }) {
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
+  const cardId = Number(params.id);
 
   useEffect(() => {
     const fetchCardAndData = async () => {
       try {
-        const res = await knowledgeAPI.getCard(params.id);
+        const res = await knowledgeAPI.getCard(cardId);
         if (res.success) {
           setCard(res.data);
           
           // Rekam view
-          const viewRes = await interactionAPI.viewCard(params.id);
+          const viewRes = await interactionAPI.viewCard(cardId);
           if (viewRes.success && viewRes.viewCount !== undefined) {
             setCard(prev => prev ? { ...prev, viewCount: viewRes.viewCount } : null);
             
             // Sync dengan feed utama dan cache
             window.dispatchEvent(new CustomEvent('card-interaction', {
-              detail: { cardId: params.id, viewCount: viewRes.viewCount }
+              detail: { cardId, viewCount: viewRes.viewCount }
             }));
-            updateCardInCache(params.id, { viewCount: viewRes.viewCount });
+            updateCardInCache(cardId, { viewCount: viewRes.viewCount });
           }
         } else {
           setError(res.error || 'Failed to load card');
@@ -51,7 +52,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
     
     const fetchComments = async () => {
       try {
-        const res = await interactionAPI.getComments(params.id);
+        const res = await interactionAPI.getComments(cardId);
         if (res.success) {
           setComments(res.data || []);
         }
@@ -62,7 +63,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
     fetchCardAndData();
     fetchComments();
-  }, [params.id]);
+  }, [cardId]);
 
   const handleSubmitComment = async () => {
     if (!user) {
@@ -75,7 +76,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
     setSubmitting(true);
     try {
       const res = await interactionAPI.addComment(
-        params.id, 
+        cardId, 
         newCommentText, 
         replyingTo ? replyingTo.id : undefined
       );
@@ -85,7 +86,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
         setReplyingTo(null);
         
         // Refresh comments list
-        const refreshed = await interactionAPI.getComments(params.id);
+        const refreshed = await interactionAPI.getComments(cardId);
         const newCommentsCount = refreshed.data ? refreshed.data.length : 0;
         
         if (refreshed.success) {
@@ -103,9 +104,9 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
         // Sync dengan feed utama dan cache
         window.dispatchEvent(new CustomEvent('card-interaction', {
-          detail: { cardId: params.id, commentsCount: newCommentsCount }
+          detail: { cardId, commentsCount: newCommentsCount }
         }));
-        updateCardInCache(params.id, { commentsCount: newCommentsCount });
+        updateCardInCache(cardId, { commentsCount: newCommentsCount });
       }
     } catch (err) {
       console.error('Failed to submit comment:', err);
