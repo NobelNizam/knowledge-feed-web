@@ -12,17 +12,13 @@ router.use(authMiddleware);
 router.use(adminMiddleware);
 
 // 1. Meng-aktifkan/menonaktifkan pipeline AI
-router.post('/pipeline/status', async (req: Request, res: Response) => {
-  const { active } = req.body || {};
-  // TODO: Implement actual logic to toggle background AI worker
-  res.json({ success: true, message: `AI Pipeline has been ${active ? 'activated' : 'deactivated'}` });
+router.post('/pipeline/status', async (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Not implemented yet' });
 });
 
 // 2. Mengatur konfigurasi fact-check atau sumber terpercaya
-router.post('/config/fact-check', async (req: Request, res: Response) => {
-  const { config } = req.body || {};
-  // TODO: Implement logic to update trusted sources config
-  res.json({ success: true, message: 'Fact-check configuration updated successfully' });
+router.post('/config/fact-check', async (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Not implemented yet' });
 });
 
 // 3. Melihat jumlah akun user yang terbuat dan jumlah online

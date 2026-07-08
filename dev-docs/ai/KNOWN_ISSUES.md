@@ -10,11 +10,10 @@
 
 | # | Area | Issue | Impact | Status |
 |---|------|-------|--------|--------|
-| O3 | `backend/src/routes/admin.ts:18,25` | POST `/api/admin/pipeline/status` dan `/config/fact-check` return `{ success: true }` tanpa implementasi aktual | RENDAH | Todo |
-| O4 | `backend/src/routes/knowledge.ts:49-57` | Search menggunakan `title: { contains: q, mode: 'insensitive' }` (ILIKE dengan leading wildcard) — tidak bisa pakai index, table scan saat data besar | RENDAH | Deferred |
-| O5 | `backend/src/routes/auth.ts:190` | Refresh token tidak dirotasi — refresh token lama tetap valid 7 hari | RENDAH | Deferred |
-| O6 | `backend/src/routes/feed.ts:445` | SSE refresh menjalankan `executePipeline()` in-process — block event loop 10-30 detik | RENDAH | Acceptable (deferred) |
-| O7 | `backend/src/routes/admin.ts:48` | `DELETE /api/admin/feed/:id` hard delete dengan cascade — tidak ada soft delete | RENDAH | Deferred |
+| O4 | ... | Search ILIKE ... | RENDAH | Deferred |
+| O5 | ... | Refresh token not rotated ... | RENDAH | Deferred |
+| O6 | ... | SSE in-process ... | RENDAH | Acceptable (deferred) |
+| O7 | ... | Hard delete ... | RENDAH | Deferred |
 
 ---
 

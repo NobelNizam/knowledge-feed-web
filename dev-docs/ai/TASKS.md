@@ -11,8 +11,6 @@
 
 | Priority | ID | Status | Task | Repo | Notes |
 |----------|----|--------|------|------|-------|
-| P1 | O3 | Todo | Return 501 di admin placeholder endpoints | backend | `admin.ts:18,25` |
-| P2 | TEST-FE | Todo | Tambahkan minimal 1 unit test frontend | frontend | `api.ts` interceptor atau `useFeedState` |
 | P2 | O4 | Deferred | Implementasi tsvector full-text search | backend | Ganti ILIKE, tambah GIN index |
 | P2 | O5 | Deferred | Refresh token rotation | backend | New session + delete old |
 | P3 | O6 | Deferred | Move SSE pipeline ke worker process | backend | Redis pub/sub |
@@ -24,9 +22,12 @@
 
 | ID | Task | Completion Date | Notes |
 |----|------|----------------|-------|
+| O3 | Return 501 di admin placeholder endpoints | 2026-07-08 | `admin.ts:18,25` |
+| LINT | Setup ESLint + fix 3 lint errors, pin deps | 2026-07-08 | `eslint@8` + `eslint-config-next@14`, lint 0 errors |
+| BUILD | Verify `next build` production | 2026-07-08 | 10/10 pages, 87.3 kB shared |
 | O1 | Fix comment endpoint leaking `user.email` | 2026-07-08 | Hapus `email: true` dari 3 tempat select comments |
 | O2 | Add CSRF Origin/Referer guard middleware | 2026-07-08 | `middleware/csrf.ts`, dipasang di `/api` |
-| BRANCH | Rename branch `docs` → `dev` | 2026-07-08 | Branch renamed + committed dev-docs/
+| BRANCH | Rename branch `docs` → `dev` | 2026-07-08 | Branch renamed + committed dev-docs/ |
 
 ---
 
@@ -34,8 +35,7 @@
 
 | Priority | Task | Reason |
 |----------|------|--------|
-| P1 | Verifikasi `npm run build` (frontend) | Status build tidak diketahui — mungkin ada error tersembunyi |
-| P1 | Verifikasi `npm run lint` (frontend + backend) | Status lint tidak diketahui |
+| P1 | Buat branch `main` dari `dev` | Konvensi ai-rules — butuh branch stabil |
 | P2 | Setup CI/CD GitHub Actions | Workflow file ada tapi status pipeline tidak jelas |
 | P2 | Integrasi MinIO untuk avatar | Container sudah jalan, aplikasi belum pakai |
 | P3 | Migrasi `console.*` ke `lib/logger.ts` | Logging inconsistency — pilih satu |
