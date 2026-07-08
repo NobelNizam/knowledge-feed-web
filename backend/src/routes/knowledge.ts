@@ -106,6 +106,7 @@ router.get('/trending', async (req: Request, res: Response) => {
 router.get('/domains', async (_req: Request, res: Response) => {
   try {
     const domains = await prisma.domain.findMany({
+      where: { parentDomainId: null },
       select: { id: true, name: true },
       orderBy: { id: 'asc' },
     });

@@ -54,8 +54,11 @@ export function OnboardingView({ availableDomains, onComplete }: OnboardingViewP
         <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
           Pilih Minat Anda
         </h1>
-        <p className="text-muted-foreground text-lg mb-8">
+        <p className="text-muted-foreground text-lg mb-4">
           Pilih topik yang ingin Anda pelajari. AI kami akan menyusun feed khusus untuk Anda.
+        </p>
+        <p className="text-muted-foreground text-xs mb-6 italic">
+          Minat lebih? Anda bisa atur lebih detail di pengaturan.
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
