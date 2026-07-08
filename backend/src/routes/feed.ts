@@ -34,7 +34,7 @@ async function resolveDomainIds(names: string[]): Promise<number[]> {
 
 const cardInclude = {
   domain: { select: { name: true } },
-  postHashtags: { include: { hashtag: { select: { name: true } } } },
+  hashtags: { include: { tag: { select: { name: true } } } },
 };
 
 /**
@@ -87,7 +87,7 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
     content: row.content,
     type: row.type,
     domain: row.domain?.name ?? row.domain ?? '',
-    tags: row.postHashtags?.map((ph: any) => ph.hashtag?.name).filter(Boolean) ?? row.tags ?? [],
+    tags: row.hashtags?.map((ph: any) => ph.tag?.name).filter(Boolean) ?? row.tags ?? [],
     sourceUrl: row.sourceUrl || row.source_url,
     sourceName: row.sourceName || row.source_name,
     aiModel: row.aiModel || row.ai_model,

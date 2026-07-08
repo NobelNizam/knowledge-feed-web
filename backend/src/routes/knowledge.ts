@@ -154,7 +154,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         where: { id: postId },
         include: {
           domain: { select: { name: true } },
-          postHashtags: { include: { hashtag: { select: { name: true } } } },
+          hashtags: { include: { tag: { select: { name: true } } } },
         },
       }),
       prisma.reaction.count({ where: { postId, reactionType: 'LIKE' } }),
@@ -180,7 +180,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: {
         ...card,
         domain: card.domain?.name ?? card.domain ?? '',
-        tags: card.postHashtags?.map((ph: any) => ph.hashtag?.name).filter(Boolean) ?? [],
+        tags: card.hashtags?.map((ph: any) => ph.tag?.name).filter(Boolean) ?? [],
         likeCount,
         dislikeCount,
         liked,
@@ -444,10 +444,10 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
     const comments = await prisma.comment.findMany({
       where: { postId, parentId: null, isDeleted: false },
       include: {
-        user: { select: { id: true, name: true } },
+        user: { select: { id: true, displayName: true } },
         replies: {
           where: { isDeleted: false },
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, displayName: true } } },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -488,7 +488,7 @@ router.post('/:id/comments', authMiddleware, async (req: Request, res: Response)
         postId,
         parentId: parentId ? parseInt(String(parentId), 10) : null,
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, displayName: true } } },
     });
 
     await updateEngagementScore(postId);

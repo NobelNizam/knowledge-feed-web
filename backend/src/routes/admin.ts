@@ -59,20 +59,20 @@ router.get('/reports', async (_req: Request, res: Response) => {
     const reports = await prisma.report.findMany({
       include: {
         reporter: { select: { id: true, displayName: true, email: true } },
-        reportedPost: { select: { id: true, title: true, domainId: true, dislikeCount: true } },
+        reportedPost: { select: { id: true, title: true, domainId: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     const data = reports.map((r) => ({
       id: r.id,
-      cardId: r.reportedPostId,
+      reportedPostId: r.reportedPostId,
       cardTitle: r.reportedPost?.title,
-      cardDomain: r.reportedPost?.domainId,
-      cardDislikeCount: r.reportedPost?.dislikeCount,
       reporterName: r.reporter?.displayName,
       reporterEmail: r.reporter?.email,
       reason: r.reason,
+      description: r.description,
+      status: r.status,
       createdAt: r.createdAt,
     }));
 
