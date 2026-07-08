@@ -22,8 +22,10 @@ export interface CardData {
   viewCount?: number;
   saveCount?: number;
   likeCount?: number;
+  dislikeCount?: number;
   shareCount?: number;
   liked?: boolean;
+  disliked?: boolean;
   saved?: boolean;
   commentsCount?: number;
   createdAt?: string;
@@ -38,4 +40,16 @@ export interface CommentData {
   user?: { name: string };
   replies?: CommentData[];
   parentId?: string;
+}
+
+export interface ReportData {
+  id: string;
+  cardId: string;
+  cardTitle: string;
+  cardDomain: string;
+  cardDislikeCount: number;
+  reporterName: string;
+  reporterEmail: string;
+  reasons: string[];
+  createdAt: string;
 }

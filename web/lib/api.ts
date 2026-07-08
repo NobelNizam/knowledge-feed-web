@@ -205,6 +205,16 @@ export const interactionAPI = {
     return response;
   },
 
+  dislikeCard: async (cardId: string) => {
+    const response = await api.post(`/knowledge/${cardId}/dislike`);
+    return response;
+  },
+
+  reportCard: async (cardId: string, reasons: string[]) => {
+    const response = await api.post(`/knowledge/${cardId}/report`, { reasons });
+    return response;
+  },
+
   viewCard: async (cardId: string) => {
     const response = await api.post(`/knowledge/${cardId}/view`);
     return response;

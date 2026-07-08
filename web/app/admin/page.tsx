@@ -3,16 +3,19 @@
 import { useState, useEffect } from 'react';
 import AdminGuard from '@/components/AdminGuard';
 import { adminAPI } from '@/lib/adminAPI';
-import { RefreshCw, Users, Server, AlertTriangle, ShieldCheck, Inbox } from 'lucide-react';
+import { RefreshCw, Users, Server, AlertTriangle, ShieldCheck, Inbox, Trash2, XCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
+import type { ReportData } from '@/lib/types';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, onlineUsers: 0 });
   const [pipelineActive, setPipelineActive] = useState(true);
   const [deleteId, setDeleteId] = useState('');
-  const [reports, setReports] = useState([]);
+  const [reports, setReports] = useState<ReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,11 +53,38 @@ export default function AdminDashboard() {
       if (res.success) {
         alert(res.message);
         setDeleteId('');
+        // refresh reports
+        const reportsRes = await adminAPI.getReports();
+        if (reportsRes.success) setReports(reportsRes.data);
       }
     } catch (err) {
       alert("Failed to delete content");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDismissReport = async (reportId: string) => {
+    setActionLoading(reportId);
+    try {
+      await adminAPI.dismissReport(reportId);
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+    } catch (err) {
+      alert("Failed to dismiss report");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteFromReport = async (cardId: string, reportId: string) => {
+    setActionLoading(reportId);
+    try {
+      await adminAPI.deleteFeedContent(cardId);
+      setReports((prev) => prev.filter((r) => r.cardId !== cardId));
+    } catch (err) {
+      alert("Failed to delete content");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -153,17 +183,61 @@ export default function AdminDashboard() {
               <div className="flex items-center mb-4 text-foreground">
                 <Inbox className="w-5 h-5 mr-2 text-primary" />
                 <h3 className="text-lg font-bold">User Reports</h3>
+                {reports.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-destructive/10 text-destructive rounded-full">{reports.length}</span>
+                )}
               </div>
-              <div className="bg-muted/50 rounded-xl border border-border p-6 flex-1 flex flex-col items-center justify-center text-center">
+              <div className="bg-muted/50 rounded-xl border border-border flex-1 overflow-y-auto max-h-[500px]">
                 {reports.length === 0 ? (
-                  <>
+                  <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
                     <Inbox className="w-10 h-10 mb-3 text-muted-foreground opacity-50" />
                     <p className="text-foreground font-bold">No pending reports.</p>
                     <p className="text-muted-foreground text-sm mt-1">Your community is looking good!</p>
-                  </>
+                  </div>
                 ) : (
-                  <div className="w-full text-left">
-                    <p className="text-sm font-medium">Load reports here...</p>
+                  <div className="divide-y divide-border">
+                    {reports.map((r) => (
+                      <div key={r.id} className="p-4 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="min-w-0">
+                            <Link href={`/card/${r.cardId}`} className="text-sm font-bold text-foreground hover:text-primary truncate block">
+                              {r.cardTitle}
+                            </Link>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              by {r.reporterName} &middot; {r.cardDomain}
+                              {r.cardDislikeCount > 0 && <span className="ml-1"> &middot; {r.cardDislikeCount} dislikes</span>}
+                            </p>
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {new Date(r.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {r.reasons.map((reason) => (
+                            <span key={reason} className="px-2 py-0.5 text-xs font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full">
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground mr-1 font-mono">ID: {r.cardId}</span>
+                          <button
+                            onClick={() => handleDismissReport(r.id)}
+                            disabled={actionLoading === r.id}
+                            className="ml-auto px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {actionLoading === r.id ? '...' : 'Dismiss'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFromReport(r.cardId, r.id)}
+                            disabled={actionLoading === r.id}
+                            className="px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {actionLoading === r.id ? '...' : 'Hapus Card'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

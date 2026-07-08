@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Heart, MessageCircle, Bookmark, Share } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, Share, ThumbsDown, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -22,8 +22,10 @@ export interface KnowledgeFeedCardProps {
     viewCount?: number;
     saveCount?: number;
     likeCount?: number;
+    dislikeCount?: number;
     shareCount?: number;
     liked?: boolean;
+    disliked?: boolean;
     saved?: boolean;
     commentsCount?: number;
     createdAt?: string;
@@ -58,12 +60,15 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   const router = useRouter();
 
   const [liked, setLiked] = useState(card.liked || false);
+  const [disliked, setDisliked] = useState(card.disliked || false);
   const [saved, setSaved] = useState(card.saved || false);
   const [likeCount, setLikeCount] = useState(card.likeCount || 0);
+  const [dislikeCount, setDislikeCount] = useState(card.dislikeCount || 0);
   const [saveCount, setSaveCount] = useState(card.saveCount || 0);
   const [viewCount, setViewCount] = useState(card.viewCount || 0);
   const [commentsCount, setCommentsCount] = useState(card.commentsCount || 0);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const parentDomain = getParentDomain(card.domain);
   const domainColor = DOMAIN_COLORS[parentDomain] || 'bg-neutral-500';
@@ -82,20 +87,24 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   useEffect(() => {
     if (card.liked !== undefined) setLiked(card.liked);
     if (card.likeCount !== undefined) setLikeCount(card.likeCount);
+    if (card.disliked !== undefined) setDisliked(card.disliked);
+    if (card.dislikeCount !== undefined) setDislikeCount(card.dislikeCount);
     if (card.saved !== undefined) setSaved(card.saved);
     if (card.saveCount !== undefined) setSaveCount(card.saveCount);
     if (card.viewCount !== undefined) setViewCount(card.viewCount);
     if (card.commentsCount !== undefined) setCommentsCount(card.commentsCount);
-  }, [card.liked, card.likeCount, card.saved, card.saveCount, card.viewCount, card.commentsCount]);
+  }, [card.liked, card.likeCount, card.disliked, card.dislikeCount, card.saved, card.saveCount, card.viewCount, card.commentsCount]);
 
   // Global Event Listener untuk sinkronisasi antar komponen secara real-time
   useEffect(() => {
     const handleInteraction = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail && customEvent.detail.cardId === card.id) {
-        const { liked: newLiked, likeCount: newLikeCount, saved: newSaved, saveCount: newSaveCount, viewCount: newViewCount, commentsCount: newCommentsCount } = customEvent.detail;
+        const { liked: newLiked, likeCount: newLikeCount, disliked: newDisliked, dislikeCount: newDislikeCount, saved: newSaved, saveCount: newSaveCount, viewCount: newViewCount, commentsCount: newCommentsCount } = customEvent.detail;
         if (newLiked !== undefined) setLiked(newLiked);
         if (newLikeCount !== undefined) setLikeCount(newLikeCount);
+        if (newDisliked !== undefined) setDisliked(newDisliked);
+        if (newDislikeCount !== undefined) setDislikeCount(newDislikeCount);
         if (newSaved !== undefined) setSaved(newSaved);
         if (newSaveCount !== undefined) setSaveCount(newSaveCount);
         if (newViewCount !== undefined) setViewCount(newViewCount);
@@ -115,39 +124,96 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
     }
 
     const previousLiked = liked;
+    const previousDisliked = disliked;
     const previousLikeCount = likeCount;
+    const previousDislikeCount = dislikeCount;
     const newLiked = !liked;
     const newLikeCount = liked ? likeCount - 1 : likeCount + 1;
+    const newDisliked = false;
+    const newDislikeCount = liked ? dislikeCount : dislikeCount > 0 ? dislikeCount - 1 : dislikeCount;
 
     setLiked(newLiked);
+    setDisliked(newDisliked);
     setLikeCount(newLikeCount);
+    if (disliked) setDislikeCount(newDislikeCount);
 
-    // Broadcast & Update Cache
     window.dispatchEvent(new CustomEvent('card-interaction', {
-      detail: { cardId: card.id, liked: newLiked, likeCount: newLikeCount }
+      detail: { cardId: card.id, liked: newLiked, disliked: newDisliked, likeCount: newLikeCount, dislikeCount: disliked ? newDislikeCount : dislikeCount }
     }));
-    updateCardInCache(card.id, { liked: newLiked, likeCount: newLikeCount });
+    updateCardInCache(card.id, { liked: newLiked, disliked: newDisliked, likeCount: newLikeCount, dislikeCount: disliked ? newDislikeCount : dislikeCount });
 
     try {
       const res = await interactionAPI.likeCard(card.id);
       if (res.success) {
         setLiked(res.liked);
         setLikeCount(res.likeCount);
-        
+        setDisliked(false);
         window.dispatchEvent(new CustomEvent('card-interaction', {
-          detail: { cardId: card.id, liked: res.liked, likeCount: res.likeCount }
+          detail: { cardId: card.id, liked: res.liked, likeCount: res.likeCount, disliked: false }
         }));
-        updateCardInCache(card.id, { liked: res.liked, likeCount: res.likeCount });
+        updateCardInCache(card.id, { liked: res.liked, likeCount: res.likeCount, disliked: false });
       }
     } catch (error) {
       setLiked(previousLiked);
+      setDisliked(previousDisliked);
       setLikeCount(previousLikeCount);
-      
+      setDislikeCount(previousDislikeCount);
       window.dispatchEvent(new CustomEvent('card-interaction', {
-        detail: { cardId: card.id, liked: previousLiked, likeCount: previousLikeCount }
+        detail: { cardId: card.id, liked: previousLiked, disliked: previousDisliked, likeCount: previousLikeCount, dislikeCount: previousDislikeCount }
       }));
-      updateCardInCache(card.id, { liked: previousLiked, likeCount: previousLikeCount });
+      updateCardInCache(card.id, { liked: previousLiked, disliked: previousDisliked, likeCount: previousLikeCount, dislikeCount: previousDislikeCount });
       console.error('Failed to toggle like:', error);
+    }
+  };
+
+  const handleDislike = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const previousLiked = liked;
+    const previousDisliked = disliked;
+    const previousLikeCount = likeCount;
+    const previousDislikeCount = dislikeCount;
+    const newDisliked = !disliked;
+    const newLikeCount = liked ? likeCount - 1 : likeCount;
+    const newLike = false;
+    const newDislikeCount = disliked ? dislikeCount - 1 : dislikeCount + 1;
+
+    setDisliked(newDisliked);
+    setLiked(newLike);
+    setDislikeCount(newDislikeCount);
+    if (liked) setLikeCount(newLikeCount);
+
+    window.dispatchEvent(new CustomEvent('card-interaction', {
+      detail: { cardId: card.id, liked: newLike, disliked: newDisliked, likeCount: liked ? newLikeCount : likeCount, dislikeCount: newDislikeCount }
+    }));
+    updateCardInCache(card.id, { liked: newLike, disliked: newDisliked, likeCount: liked ? newLikeCount : likeCount, dislikeCount: newDislikeCount });
+
+    try {
+      const res = await interactionAPI.dislikeCard(card.id);
+      if (res.success) {
+        setDisliked(res.disliked);
+        setDislikeCount(res.dislikeCount);
+        setLiked(false);
+        setLikeCount(res.likeCount);
+        window.dispatchEvent(new CustomEvent('card-interaction', {
+          detail: { cardId: card.id, disliked: res.disliked, dislikeCount: res.dislikeCount, liked: false, likeCount: res.likeCount }
+        }));
+        updateCardInCache(card.id, { disliked: res.disliked, dislikeCount: res.dislikeCount, liked: false, likeCount: res.likeCount });
+      }
+    } catch (error) {
+      setDisliked(previousDisliked);
+      setLiked(previousLiked);
+      setDislikeCount(previousDislikeCount);
+      setLikeCount(previousLikeCount);
+      window.dispatchEvent(new CustomEvent('card-interaction', {
+        detail: { cardId: card.id, liked: previousLiked, disliked: previousDisliked, likeCount: previousLikeCount, dislikeCount: previousDislikeCount }
+      }));
+      updateCardInCache(card.id, { liked: previousLiked, disliked: previousDisliked, likeCount: previousLikeCount, dislikeCount: previousDislikeCount });
+      console.error('Failed to toggle dislike:', error);
     }
   };
 
@@ -295,6 +361,22 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
 
             <button 
               onClick={(e) => {
+                e.stopPropagation();
+                handleDislike(e);
+              }}
+              className="flex items-center gap-1.5 group h-9 min-w-[36px] px-2 justify-center rounded-full hover:bg-amber-500/10 transition-colors"
+              title="Tidak Suka"
+            >
+              <ThumbsDown 
+                className={cn("h-5 w-5 transition-colors", disliked ? "fill-amber-500 text-amber-500" : "text-muted-foreground group-hover:text-amber-500")} 
+              />
+              <span className={cn("text-xs font-medium", disliked ? "text-amber-500" : "text-muted-foreground group-hover:text-amber-500")}>
+                {dislikeCount > 0 ? dislikeCount : ''}
+              </span>
+            </button>
+
+            <button 
+              onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!isDetailView) {
@@ -319,6 +401,19 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
               title="Bagikan"
             >
               <Share className="h-5 w-5 text-muted-foreground group-hover:text-green-500 transition-colors" />
+            </button>
+
+            <button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!user) { router.push('/login'); return; }
+                setShowReportModal(true);
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-orange-500/10 group transition-colors"
+              title="Laporkan"
+            >
+              <Flag className="h-4 w-4 text-muted-foreground group-hover:text-orange-500 transition-colors" />
             </button>
 
             <div className="ml-auto flex items-center gap-2 sm:gap-4">
@@ -394,6 +489,64 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
           </div>
         </div>
       )}
+      {/* Report Modal */}
+      {showReportModal && <ReportModal cardId={card.id} onClose={() => setShowReportModal(false)} />}
     </article>
+  );
+}
+
+const REPORT_REASONS = ['tidak akurat', 'bahasanya jelek', 'duplikat', 'error', 'tidak pantas'];
+
+function ReportModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [submitted, setSubmitted] = useState(false);
+
+  const toggle = (r: string) => {
+    setSelected((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]);
+  };
+
+  const handleSubmit = async () => {
+    if (selected.length === 0) return;
+    try {
+      await interactionAPI.reportCard(cardId, selected);
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Report failed:', err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm mx-4 bg-background/80 backdrop-blur-lg border border-border/80 p-6 rounded-2xl shadow-xl flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold text-foreground text-sm">Laporkan Konten</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm font-semibold p-1 hover:bg-muted rounded-full w-6 h-6 flex items-center justify-center">✕</button>
+        </div>
+        {submitted ? (
+          <div className="text-center py-4">
+            <p className="text-emerald-500 font-bold text-sm">Laporan terkirim!</p>
+            <p className="text-muted-foreground text-xs mt-1">Terima kasih atas laporan Anda.</p>
+            <button onClick={onClose} className="mt-4 px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg">Tutup</button>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">Pilih alasan pelaporan:</p>
+            <div className="flex flex-wrap gap-2">
+              {REPORT_REASONS.map((r) => (
+                <button key={r} onClick={() => toggle(r)} className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                  selected.includes(r) ? "bg-orange-500 text-white border-orange-500" : "bg-muted text-muted-foreground border-border hover:border-orange-500/50"
+                )}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <button onClick={handleSubmit} disabled={selected.length === 0} className="w-full py-2.5 bg-orange-500 text-white text-sm font-bold rounded-xl hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              Kirim Laporan
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
