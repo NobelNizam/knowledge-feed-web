@@ -276,7 +276,6 @@ model Report {
   user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, cardId])
   @@index([createdAt])
   @@map("reports")
 }

@@ -382,19 +382,6 @@ router.post('/:id/report', authMiddleware, async (req: Request, res: Response) =
     const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const existingReport = await prisma.report.findUnique({
-      where: { userId_cardId: { userId, cardId } },
-    });
-
-    if (existingReport) {
-      // update reasons instead of rejecting
-      const updated = await prisma.report.update({
-        where: { id: existingReport.id },
-        data: { reasons: filtered },
-      });
-      return res.json({ success: true, data: updated });
-    }
-
     const report = await prisma.report.create({
       data: { userId, cardId, reasons: filtered },
     });

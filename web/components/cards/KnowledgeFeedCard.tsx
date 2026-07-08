@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Heart, MessageCircle, Bookmark, Share, ThumbsDown, Flag } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, Share, ThumbsDown, Flag, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -342,7 +342,7 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
           )}
 
           {/* Interaction Bar */}
-          <div className="mt-4 flex items-center gap-4 sm:gap-6 relative z-10">
+          <div className="mt-4 flex items-center gap-1.5 sm:gap-3 relative z-10">
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -410,14 +410,19 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
                 if (!user) { router.push('/login'); return; }
                 setShowReportModal(true);
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-orange-500/10 group transition-colors"
+              className="flex items-center gap-1.5 group h-9 min-w-[36px] px-2 justify-center rounded-full hover:bg-orange-500/10 transition-colors"
               title="Laporkan"
             >
               <Flag className="h-4 w-4 text-muted-foreground group-hover:text-orange-500 transition-colors" />
+              <span className="text-xs font-medium text-muted-foreground group-hover:text-orange-500 hidden sm:inline">
+                Report
+              </span>
             </button>
 
-            <div className="ml-auto flex items-center gap-2 sm:gap-4">
-              <span className="text-xs text-muted-foreground mr-1">👁️ {viewCount}</span>
+              <div className="ml-auto flex items-center gap-2 sm:gap-3">
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Eye className="h-4 w-4" /> {viewCount > 0 ? viewCount : ''}
+                </span>
               
               <button 
                 onClick={(e) => {
