@@ -221,6 +221,10 @@ router.post('/:id/like', authMiddleware, async (req: Request, res: Response) => 
     }
 
     const likeCount = await prisma.like.count({ where: { cardId } });
+    await prisma.knowledgeCard.update({
+      where: { id: cardId },
+      data: { likeCount },
+    });
     await updateEngagementScore(cardId);
 
     res.json({ success: true, liked, likeCount });

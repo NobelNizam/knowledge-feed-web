@@ -26,10 +26,11 @@ model KnowledgeCard {
   aiModel         String?  @map("ai_model")
   generatedAt     DateTime @default(now()) @map("generated_at")
   
-  viewCount       Int      @default(0) @map("view_count")
-  saveCount       Int      @default(0) @map("save_count")
-  shareCount      Int      @default(0) @map("share_count")
-  dislikeCount    Int      @default(0) @map("dislike_count")
+   viewCount       Int      @default(0) @map("view_count")
+   likeCount       Int      @default(0) @map("like_count")
+   saveCount       Int      @default(0) @map("save_count")
+   shareCount      Int      @default(0) @map("share_count")
+   dislikeCount    Int      @default(0) @map("dislike_count")
   engagementScore Float    @default(0) @map("engagement_score")
   
   // RAG Pipeline fields
