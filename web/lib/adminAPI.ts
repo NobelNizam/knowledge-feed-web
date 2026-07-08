@@ -24,5 +24,10 @@ export const adminAPI = {
   getReports: async () => {
     const response = await api.get('/admin/reports');
     return response;
+  },
+
+  dismissReport: async (id: string) => {
+    const response = await api.delete(`/admin/reports/${id}`);
+    return response;
   }
 };

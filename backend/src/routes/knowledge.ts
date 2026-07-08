@@ -134,9 +134,11 @@ router.get('/:id', async (req: Request, res: Response) => {
       prisma.knowledgeCard.findUnique({ where: { id } }),
       prisma.like.count({ where: { cardId: id } }),
       prisma.comment.count({ where: { cardId: id } }),
+      prisma.dislike.count({ where: { cardId: id } }),
     ];
     if (userId) {
       queries.push(prisma.like.count({ where: { userId, cardId: id } }));
+      queries.push(prisma.dislike.count({ where: { userId, cardId: id } }));
       queries.push(
         prisma.user.findUnique({
           where: { id: userId },
@@ -145,10 +147,11 @@ router.get('/:id', async (req: Request, res: Response) => {
       );
     }
 
-    const [card, likeCount, commentsCount, userLikeCount, user] = await Promise.all(queries);
+    const [card, likeCount, commentsCount, dislikeCount, userLikeCount, userDislikeCount, user] = await Promise.all(queries);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
     const liked = userId ? userLikeCount > 0 : false;
+    const disliked = userId ? userDislikeCount > 0 : false;
     const saved = userId ? (user?.savedCards?.length || 0) > 0 : false;
 
     res.json({
@@ -156,7 +159,9 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: {
         ...card,
         likeCount,
+        dislikeCount,
         liked,
+        disliked,
         saved,
         saveCount: card.saveCount || 0,
         commentsCount,
@@ -170,19 +175,20 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 async function updateEngagementScore(cardId: string) {
   try {
-    const [card, likesCount, commentsCount] = await Promise.all([
+    const [card, likesCount, dislikesCount, commentsCount] = await Promise.all([
       prisma.knowledgeCard.findUnique({
         where: { id: cardId },
         select: { viewCount: true, shareCount: true },
       }),
       prisma.like.count({ where: { cardId } }),
+      prisma.dislike.count({ where: { cardId } }),
       prisma.comment.count({ where: { cardId } }),
     ]);
 
     if (!card) return;
 
     const engagementScore =
-      likesCount * 3 + commentsCount * 5 + card.viewCount * 1 + card.shareCount * 4;
+      likesCount * 3 + dislikesCount * -3 + commentsCount * 5 + card.viewCount * 1 + card.shareCount * 4;
 
     await prisma.knowledgeCard.update({
       where: { id: cardId },
@@ -293,6 +299,110 @@ router.post('/:id/share', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Share error:', error);
     res.status(500).json({ error: 'Failed to record share' });
+  }
+});
+
+// POST /api/knowledge/:id/dislike
+router.post('/:id/dislike', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id: cardId } = req.params;
+    const userId = req.user!.userId;
+
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    const existingDislike = await prisma.dislike.findUnique({
+      where: { userId_cardId: { userId, cardId } },
+    });
+
+    let disliked = false;
+    if (existingDislike) {
+      await prisma.dislike.delete({ where: { id: existingDislike.id } });
+    } else {
+      // mutual exclusive: auto-hapus like
+      const existingLike = await prisma.like.findUnique({
+        where: { userId_cardId: { userId, cardId } },
+      });
+      if (existingLike) {
+        await prisma.like.delete({ where: { id: existingLike.id } });
+      }
+
+      await prisma.dislike.create({ data: { userId, cardId } });
+      disliked = true;
+
+      // auto-flag: dislike pertama → system report "tidak disukai"
+      const dislikeCount = await prisma.dislike.count({ where: { cardId } });
+      if (dislikeCount === 1) {
+        const sysUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+        if (sysUser) {
+          await prisma.report.upsert({
+            where: { userId_cardId: { userId: sysUser.id, cardId } },
+            create: { userId: sysUser.id, cardId, reasons: ['tidak disukai'] },
+            update: {},
+          });
+        }
+      }
+    }
+
+    const [likeCount, dislikeCount] = await Promise.all([
+      prisma.like.count({ where: { cardId } }),
+      prisma.dislike.count({ where: { cardId } }),
+    ]);
+
+    await prisma.knowledgeCard.update({
+      where: { id: cardId },
+      data: { dislikeCount },
+    });
+    await updateEngagementScore(cardId);
+
+    res.json({ success: true, disliked, dislikeCount, likeCount });
+  } catch (error) {
+    console.error('Dislike error:', error);
+    res.status(500).json({ error: 'Failed to toggle dislike' });
+  }
+});
+
+// POST /api/knowledge/:id/report
+router.post('/:id/report', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id: cardId } = req.params;
+    const userId = req.user!.userId;
+    const { reasons } = req.body || {};
+
+    if (!reasons || !Array.isArray(reasons) || reasons.length === 0) {
+      return res.status(400).json({ error: 'Minimal satu alasan report diperlukan' });
+    }
+
+    const validReasons = ['tidak akurat', 'bahasanya jelek', 'duplikat', 'error', 'tidak pantas'];
+    const filtered = reasons.filter((r: string) => validReasons.includes(r));
+    if (filtered.length === 0) {
+      return res.status(400).json({ error: 'Alasan report tidak valid' });
+    }
+
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    const existingReport = await prisma.report.findUnique({
+      where: { userId_cardId: { userId, cardId } },
+    });
+
+    if (existingReport) {
+      // update reasons instead of rejecting
+      const updated = await prisma.report.update({
+        where: { id: existingReport.id },
+        data: { reasons: filtered },
+      });
+      return res.json({ success: true, data: updated });
+    }
+
+    const report = await prisma.report.create({
+      data: { userId, cardId, reasons: filtered },
+    });
+
+    res.json({ success: true, data: report });
+  } catch (error) {
+    console.error('Report error:', error);
+    res.status(500).json({ error: 'Failed to submit report' });
   }
 });
 

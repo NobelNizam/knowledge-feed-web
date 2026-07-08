@@ -6,7 +6,7 @@ services:
     container_name: knowledge-feed-db
     environment:
       POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_PASSWORD: ${DATABASE_PASS}
       POSTGRES_DB: ${DATABASE_NAME}
     ports:
       - "5432:5432"
@@ -40,13 +40,22 @@ services:
 
   api:
     build: .
+    image: knowledge-feed-api:latest
     container_name: knowledge-feed-api
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${DATABASE_USER}:${DATABASE_PASS}@postgres:5432/${DATABASE_NAME}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=${NODE_ENV}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - NVIDIA_MODEL=${NVIDIA_MODEL}
+      - NVIDIA_API_BASE_URL=${NVIDIA_API_BASE_URL}
+      - NVIDIA_EMBED_MODEL=${NVIDIA_EMBED_MODEL}
+      - JWT_SECRET=${JWT_SECRET}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ANON_VIEW_SALT=${ANON_VIEW_SALT}
     depends_on:
       - postgres
       - redis
@@ -54,12 +63,21 @@ services:
 
   worker:
     build: .
+    image: knowledge-feed-worker:latest
     container_name: knowledge-feed-worker
-    command: node src/workers/contentGenerator.js
+    command: node dist/workers/startWorker.js
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${DATABASE_USER}:${DATABASE_PASS}@postgres:5432/${DATABASE_NAME}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=${NODE_ENV}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - NVIDIA_MODEL=${NVIDIA_MODEL}
+      - NVIDIA_API_BASE_URL=${NVIDIA_API_BASE_URL}
+      - NVIDIA_EMBED_MODEL=${NVIDIA_EMBED_MODEL}
+      - JWT_SECRET=${JWT_SECRET}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ANON_VIEW_SALT=${ANON_VIEW_SALT}
     depends_on:
       - postgres
       - redis

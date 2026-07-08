@@ -31,14 +31,22 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
 
   const cardIds = cards.map((c) => c.id);
 
-  const [likes, userLikes, comments, savedCards] = await Promise.all([
+  const [likes, dislikes, userLikes, userDislikes, comments, savedCards] = await Promise.all([
     prisma.like.groupBy({
+      by: ['cardId'],
+      where: { cardId: { in: cardIds } },
+      _count: { id: true },
+    }),
+    prisma.dislike.groupBy({
       by: ['cardId'],
       where: { cardId: { in: cardIds } },
       _count: { id: true },
     }),
     userId
       ? prisma.like.findMany({ where: { userId, cardId: { in: cardIds } } })
+      : Promise.resolve([]),
+    userId
+      ? prisma.dislike.findMany({ where: { userId, cardId: { in: cardIds } } })
       : Promise.resolve([]),
     prisma.comment.groupBy({
       by: ['cardId'],
@@ -54,7 +62,9 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
   ]);
 
   const likesMap = Object.fromEntries(likes.map((l) => [l.cardId, l._count.id]));
+  const dislikesMap = Object.fromEntries(dislikes.map((d) => [d.cardId, d._count.id]));
   const likedSet = new Set(userLikes.map((ul) => ul.cardId));
+  const dislikedSet = new Set(userDislikes.map((ud) => ud.cardId));
   const commentsMap = Object.fromEntries(comments.map((c) => [c.cardId, c._count.id]));
   const savedSet = new Set(savedCards?.savedCards?.map((sc: any) => sc.id) || []);
 
@@ -81,7 +91,9 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
     createdAt: row.createdAt || row.created_at,
     updatedAt: row.updatedAt || row.updated_at,
     likeCount: likesMap[row.id] || 0,
+    dislikeCount: dislikesMap[row.id] || 0,
     liked: likedSet.has(row.id),
+    disliked: dislikedSet.has(row.id),
     saved: savedSet.has(row.id),
     commentsCount: commentsMap[row.id] || 0,
   }));

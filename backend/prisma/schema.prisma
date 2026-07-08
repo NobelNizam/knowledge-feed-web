@@ -2,7 +2,8 @@
 // Includes RAG Pipeline models (PGVector managed via raw SQL)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -28,6 +29,7 @@ model KnowledgeCard {
   viewCount       Int      @default(0) @map("view_count")
   saveCount       Int      @default(0) @map("save_count")
   shareCount      Int      @default(0) @map("share_count")
+  dislikeCount    Int      @default(0) @map("dislike_count")
   engagementScore Float    @default(0) @map("engagement_score")
   
   // RAG Pipeline fields
@@ -43,6 +45,8 @@ model KnowledgeCard {
   savedBy         User[]   @relation("SavedCards")
   factCheckResults FactCheckResult[]
   likes           Like[]
+  dislikes        Dislike[]
+  reports         Report[]
   views           View[]
   comments        Comment[]
   
@@ -74,6 +78,8 @@ model User {
   savedCards   KnowledgeCard[] @relation("SavedCards")
   sessions     Session[]
   likes        Like[]
+  dislikes     Dislike[]
+  reports      Report[]
   views        View[]
   comments     Comment[]
   
@@ -245,4 +251,32 @@ model Comment {
 
   @@index([cardId], map: "idx_comments_card_id")
   @@map("comments")
+}
+
+model Dislike {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@map("dislikes")
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  reasons   String[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card KnowledgeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@index([createdAt])
+  @@map("reports")
 }
