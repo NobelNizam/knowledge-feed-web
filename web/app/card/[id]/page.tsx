@@ -164,7 +164,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
             <div className="flex-1">
               {replyingTo && (
                 <div className="mb-2 p-2 bg-muted rounded-lg flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Membalas <strong>@{replyingTo.user?.name || 'User'}</strong>: "{replyingTo.content.substring(0, 30)}..."</span>
+                  <span>Membalas <strong>@{replyingTo.user?.name || 'User'}</strong>: &ldquo;{replyingTo.content.substring(0, 30)}&rdquo;</span>
                   <button onClick={() => setReplyingTo(null)} className="text-destructive font-bold ml-2">Batal</button>
                 </div>
               )}

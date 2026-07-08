@@ -10,7 +10,7 @@
 
 | Repo | Branch | Last Commit | Notes |
 |------|--------|------------|-------|
-| root (monorepo) | `dev` | `5a3eef0` | O1+O2 security fixes applied |
+| root (monorepo) | `dev` | `c03e019` | O1+O2+O3 done, lint/build verified |
 
 | Last Updated | 2026-07-08 |
 | Updated By | AI (deepseek-v4-pro) |
