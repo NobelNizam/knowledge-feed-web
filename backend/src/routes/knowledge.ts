@@ -414,9 +414,9 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
     const comments = await prisma.comment.findMany({
       where: { cardId, parentId: null },
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true } },
         replies: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: { user: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -451,7 +451,7 @@ router.post('/:id/comments', authMiddleware, async (req: Request, res: Response)
 
     const comment = await prisma.comment.create({
       data: { content: text, userId, cardId, parentId: parentId || null },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      include: { user: { select: { id: true, name: true } } },
     });
 
     await updateEngagementScore(cardId);

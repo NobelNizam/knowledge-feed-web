@@ -11,6 +11,7 @@ import knowledgeRoutes from './routes/knowledge';
 import userRoutes from './routes/user';
 import adminRoutes from './routes/admin';
 import generateRoutes from './routes/generate';
+import csrfMiddleware from './middleware/csrf';
 
 import prisma from './lib/prisma';
 
@@ -91,6 +92,9 @@ const globalLimiter = rateLimit({
   message: { error: 'Too many requests from this IP' },
 });
 app.use('/api', globalLimiter);
+
+// CSRF: Origin/Referer guard for cookie-auth mutating endpoints
+app.use('/api', csrfMiddleware);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
