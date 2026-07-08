@@ -141,11 +141,11 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex flex-col flex-1 w-full max-w-2xl mx-auto border-x border-border min-h-screen bg-background">
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-4 flex items-center">
-        <button onClick={() => router.back()} className="mr-4 p-2 rounded-full hover:bg-muted transition-colors">
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-3 py-2.5 sm:px-4 sm:py-3 flex items-center">
+        <button onClick={() => router.back()} className="mr-3 p-1.5 rounded-full hover:bg-muted transition-colors -ml-1">
           <ArrowLeft className="w-5 h-5 text-foreground" />
         </button>
-        <h1 className="text-xl font-bold">Postingan</h1>
+        <h1 className="text-lg font-bold">Postingan</h1>
       </div>
 
       <div className="pb-8">

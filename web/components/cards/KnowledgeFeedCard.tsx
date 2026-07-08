@@ -286,7 +286,6 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
 
   return (
     <article className="relative flex w-full flex-col border-b border-border bg-background px-3 py-4 sm:px-5">
-      {/* Absolute Overlay Link untuk detail card */}
       {!isDetailView && (
         <Link 
           href={`/card/${card.id}`} 
@@ -295,89 +294,84 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
         />
       )}
 
-      <div className="flex w-full">
-        {/* Left column: Vertical line aesthetic */}
-        <div className="flex flex-col items-center mr-3 sm:mr-4 shrink-0">
-          <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border flex items-center justify-center text-xl bg-card">
-            {domainIcon}
+      {/* Single-column layout: domain icon moved to header for full content width */}
+      <div className="flex w-full flex-col min-w-0">
+        {/* Header: domain badge + domain icon + date */}
+        <div className="flex items-center gap-2 w-full">
+          <span className={cn('px-2 py-0.5 text-xs font-bold text-white rounded-full relative z-10 shrink-0', domainColor)}>
+            {card.domain?.toUpperCase()}
+          </span>
+          <div className="ml-auto flex items-center gap-2 text-muted-foreground">
+            <span className="text-lg leading-none">{domainIcon}</span>
+            <span className="text-xs">{formattedDate}</span>
           </div>
-          {!isDetailView && <div className="mt-2 w-0.5 grow rounded-full bg-border" />}
         </div>
 
-        {/* Right column: Content */}
-        <div className="flex w-full flex-col min-w-0">
-          {/* Header */}
-          <div className="flex justify-between items-center w-full">
-            <div className="flex items-center gap-2">
-              <span className={cn('px-2 py-0.5 text-xs font-bold text-white rounded-full relative z-10', domainColor)}>
-                {card.domain?.toUpperCase()}
+        {/* Title */}
+        <h2 className={cn("mt-2 font-bold text-foreground", isDetailView ? "text-xl md:text-2xl" : "text-base md:text-lg")}>
+          {card.title}
+        </h2>
+
+        {/* Body */}
+        <div className={cn("mt-2 text-foreground/90 whitespace-pre-line leading-relaxed", isDetailView ? "text-base" : "text-sm")}>
+          {displayContent}
+        </div>
+
+        {/* Tags */}
+        {card.tags && card.tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2 relative z-10">
+            {card.tags.slice(0, 4).map((tag, i) => (
+              <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-md font-medium">
+                #{tag}
               </span>
-            </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-1">
-              <span>{formattedDate}</span>
-            </div>
+            ))}
           </div>
+        )}
 
-          {/* Title */}
-          <h2 className={cn("mt-2 font-bold text-foreground", isDetailView ? "text-xl md:text-2xl" : "text-base md:text-lg")}>
-            {card.title}
-          </h2>
-
-          {/* Body */}
-          <div className={cn("mt-2 text-foreground/90 whitespace-pre-line leading-relaxed", isDetailView ? "text-base" : "text-sm")}>
-            {displayContent}
+        {/* Source Link (detail view only) */}
+        {isDetailView && card.sourceUrl && (
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg border border-border relative z-10">
+            <p className="text-xs text-muted-foreground font-medium mb-1">Sumber:</p>
+            <a href={card.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1 break-all">
+              {card.sourceName || card.sourceUrl}
+            </a>
           </div>
+        )}
 
-          {/* Tags */}
-          {card.tags && card.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2 relative z-10">
-              {card.tags.slice(0, 4).map((tag, i) => (
-                <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-md font-medium">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
+        {/* Interaction Bar */}
+        <div className="mt-4 flex items-center gap-1 sm:gap-2 relative z-10">
+          {/* Like */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleLike(e); }}
+            className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-red-500/10 transition-colors"
+            title="Like"
+          >
+            <Heart className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", liked ? "fill-red-500 text-red-500" : "text-muted-foreground group-hover:text-red-500")} />
+            {likeCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", liked ? "text-red-500" : "text-muted-foreground group-hover:text-red-500")}>{abbr(likeCount)}</span>}
+          </button>
 
-          {/* Source Link */}
-          {isDetailView && card.sourceUrl && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-lg border border-border relative z-10">
-              <p className="text-xs text-muted-foreground font-medium mb-1">Sumber:</p>
-              <a href={card.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1 break-all">
-                🔗 {card.sourceName || card.sourceUrl}
-              </a>
-            </div>
-          )}
+          {/* Dislike */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleDislike(e); }}
+            className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-amber-500/10 transition-colors"
+            title="Tidak Suka"
+          >
+            <ThumbsDown className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", disliked ? "fill-amber-500 text-amber-500" : "text-muted-foreground group-hover:text-amber-500")} />
+            {dislikeCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", disliked ? "text-amber-500" : "text-muted-foreground group-hover:text-amber-500")}>{abbr(dislikeCount)}</span>}
+          </button>
 
-          {/* Interaction Bar — mobile-first: compact icons, abbreviated counts, icon-only when zero */}
-          <div className="mt-4 flex items-center gap-1 sm:gap-2 relative z-10">
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleLike(e); }}
-              className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-red-500/10 transition-colors"
-              title="Like"
-            >
-              <Heart className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", liked ? "fill-red-500 text-red-500" : "text-muted-foreground group-hover:text-red-500")} />
-              {likeCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", liked ? "text-red-500" : "text-muted-foreground group-hover:text-red-500")}>{abbr(likeCount)}</span>}
-            </button>
+          {/* Comment */}
+          <button 
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isDetailView) router.push(`/card/${card.id}`); }}
+            className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-blue-500/10 transition-colors"
+            title="Komentar"
+          >
+            <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
+            {commentsCount > 0 && <span className="text-[11px] sm:text-xs font-medium text-muted-foreground group-hover:text-blue-500">{abbr(commentsCount)}</span>}
+          </button>
 
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleDislike(e); }}
-              className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-amber-500/10 transition-colors"
-              title="Tidak Suka"
-            >
-              <ThumbsDown className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", disliked ? "fill-amber-500 text-amber-500" : "text-muted-foreground group-hover:text-amber-500")} />
-              {dislikeCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", disliked ? "text-amber-500" : "text-muted-foreground group-hover:text-amber-500")}>{abbr(dislikeCount)}</span>}
-            </button>
-
-            <button 
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isDetailView) router.push(`/card/${card.id}`); }}
-              className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-blue-500/10 transition-colors"
-              title="Komentar"
-            >
-              <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
-              {commentsCount > 0 ? <span className="text-[11px] sm:text-xs font-medium text-muted-foreground group-hover:text-blue-500">{abbr(commentsCount)}</span> : <span className="text-[11px] sm:text-xs font-medium text-muted-foreground group-hover:text-blue-500 hidden sm:inline">Balas</span>}
-            </button>
-
+          {/* Share (detail view only) */}
+          {isDetailView && (
             <button 
               onClick={(e) => { e.stopPropagation(); handleShare(e); }}
               className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-green-500/10 group transition-colors"
@@ -385,36 +379,39 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
             >
               <Share className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-green-500 transition-colors" />
             </button>
+          )}
 
+          {/* Report (detail view only) */}
+          {isDetailView && (
             <button 
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!user) { router.push('/login'); return; } setShowReportModal(true); }}
-              className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-orange-500/10 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-orange-500/10 group transition-colors"
               title="Laporkan"
             >
               <Flag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground group-hover:text-orange-500 transition-colors" />
-              <span className="text-[10px] sm:text-xs font-medium text-muted-foreground group-hover:text-orange-500 hidden sm:inline">Report</span>
             </button>
+          )}
 
-            <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-              <span className="flex items-center gap-1 text-[11px] sm:text-xs text-muted-foreground shrink-0">
-                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                {viewCount > 0 ? abbr(viewCount) : ''}
-              </span>
+          {/* Right group: Views + Save */}
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            <span className="flex items-center gap-1 text-[11px] sm:text-xs text-muted-foreground shrink-0">
+              <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {viewCount > 0 ? abbr(viewCount) : ''}
+            </span>
 
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleSave(e); }}
-                className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-primary/10 transition-colors"
-                title="Simpan"
-              >
-                <Bookmark className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", saved ? "fill-primary text-primary" : "text-muted-foreground group-hover:text-primary")} />
-                {saveCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", saved ? "text-primary" : "text-muted-foreground group-hover:text-primary")}>{abbr(saveCount)}</span>}
-              </button>
-            </div>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleSave(e); }}
+              className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-primary/10 transition-colors"
+              title="Simpan"
+            >
+              <Bookmark className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", saved ? "fill-primary text-primary" : "text-muted-foreground group-hover:text-primary")} />
+              {saveCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", saved ? "text-primary" : "text-muted-foreground group-hover:text-primary")}>{abbr(saveCount)}</span>}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Share Modal Glassmorphism (Ponytail/YAGNI) */}
+      {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md animate-in fade-in duration-200">
           <div 
