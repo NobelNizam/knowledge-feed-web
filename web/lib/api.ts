@@ -85,11 +85,11 @@ const api = {
 };
 
 export const authAPI = {
-  register: async (data: { displayName: string; username: string; email: string; password: string }) => {
+  register: async (data: { displayName: string; username: string; email?: string; password: string }) => {
     const response = await api.post('/auth/register', data, { _skipRefresh: true });
     return response;
   },
-  login: async (data: { email: string; password: string }) => {
+  login: async (data: { login: string; password: string }) => {
     const response = await api.post('/auth/login', data, { _skipRefresh: true });
     return response;
   },

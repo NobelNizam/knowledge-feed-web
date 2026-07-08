@@ -7,12 +7,12 @@ import { authAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
-  const { login } = useAuth();
+  const { login: doLogin } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,9 +22,9 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const res = await authAPI.login({ email, password });
+      const res = await authAPI.login({ login, password });
       if (res.success) {
-        login(res.user);
+        doLogin(res.user ?? res.data);
         router.push('/');
       }
     } catch (err: unknown) {
@@ -38,8 +38,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="max-w-md w-full bg-card rounded-2xl shadow-sm p-8 border border-border">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Welcome Back</h1>
-          <p className="text-muted-foreground mt-2">Sign in to Knowledge Feed</p>
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Bishamon!</h1>
+          <p className="text-muted-foreground mt-2">Are you ready to ride, noble one?</p>
         </div>
         
         {error && (
@@ -50,13 +50,14 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-foreground mb-2">Email</label>
+            <label className="block text-sm font-bold text-foreground mb-2">Username or Email</label>
             <input
-              type="email"
+              type="text"
               required
+              placeholder="Which one?"
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
               disabled={isSubmitting}
             />
           </div>
@@ -65,6 +66,7 @@ export default function Login() {
             <input
               type="password"
               required
+              placeholder="Did you remember?"
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -78,14 +80,14 @@ export default function Login() {
               isSubmitting ? 'bg-primary/50 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 hover:shadow-md'
             }`}
           >
-            {isSubmitting ? 'Signing in...' : 'Sign In'}
+            {isSubmitting ? 'Mounting...' : 'Ready'}
           </button>
         </form>
 
         <p className="text-center mt-8 text-muted-foreground text-sm font-medium">
-          Don&apos;t have an account?{' '}
+          I don&apos;t have a horse yet.{' '}
           <Link href="/register" className="text-primary hover:underline">
-            Create one
+            Summon one.
           </Link>
         </p>
       </div>

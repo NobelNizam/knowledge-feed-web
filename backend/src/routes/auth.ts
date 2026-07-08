@@ -16,6 +16,21 @@ const authLimiter = rateLimit({
   message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
 });
 
+// ---- validation helpers ----
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
+const SUSPICIOUS_RE = /(<script|<\/script|--|\bDROP\s+TABLE\b|\bALTER\s+TABLE\b|\bEXEC\s*\()/i;
+
+const sanitize = (s: string): string => s.trim();
+const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+
+function suspicious(s: string): boolean {
+  return SUSPICIOUS_RE.test(s);
+}
+
+// ---- token helpers (unchanged) ----
+
 // ponytail: store SHA-256(refreshToken) in the DB, not the JWT itself.
 const hashRefreshToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
@@ -57,31 +72,78 @@ async function generateTokens(userId: number, role: string, req: Request) {
   return { accessToken, refreshToken };
 }
 
+// ponytail: keep the select shape in one place
+const USER_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  email: true,
+  role: true,
+  readingLevel: true,
+  dailyDigest: true,
+} as const;
+
+// ---- routes ----
+
 router.post('/register', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { username, name, email, password } = req.body || {};
+    const { username: rawUsername, displayName: rawName, email: rawEmail, password: rawPassword } = req.body || {};
 
-    if (!username || !name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    // ---- required fields ----
+    if (!rawUsername || !rawName || !rawPassword) {
+      return res.status(400).json({ error: 'Username, display name, and password are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    // ---- sanitize ----
+    const username = sanitize(String(rawUsername));
+    const displayName = stripHtml(sanitize(String(rawName)));
+    const password = String(rawPassword);
+    const email = rawEmail ? sanitize(String(rawEmail)) : null;
+
+    // ---- suspicious check ----
+    if (suspicious(username) || suspicious(displayName) || (email && suspicious(email))) {
+      return res.status(400).json({ error: 'Input contains disallowed patterns' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    // ---- username validation ----
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters' });
+    }
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already in use' });
+    // ---- displayName validation ----
+    if (displayName.length < 1 || displayName.length > 100) {
+      return res.status(400).json({ error: 'Display name must be 1-100 characters' });
     }
 
+    // ---- email validation (optional) ----
+    if (email) {
+      if (email.length > 254) {
+        return res.status(400).json({ error: 'Email must be at most 254 characters' });
+      }
+      if (!EMAIL_RE.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    }
+
+    // ---- password validation ----
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ error: 'Password must be 8-128 characters' });
+    }
+
+    // ---- uniqueness checks ----
     const existingUsername = await prisma.user.findUnique({ where: { username } });
     if (existingUsername) {
       return res.status(400).json({ error: 'Username already in use' });
+    }
+
+    if (email) {
+      const existingEmail = await prisma.user.findUnique({ where: { email } });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -89,11 +151,11 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: {
         username,
-        displayName: name,
+        displayName,
         email,
         passwordHash: hashedPassword,
       },
-      select: { id: true, username: true, displayName: true, email: true, role: true, readingLevel: true, dailyDigest: true },
+      select: USER_SELECT,
     });
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
@@ -109,32 +171,38 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body || {};
+    const { login, password } = req.body || {};
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!login || !password) {
+      return res.status(400).json({ error: 'Login and password are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    const loginStr = sanitize(String(login));
+    const passwordStr = String(password);
+
+    if (suspicious(loginStr)) {
+      return res.status(400).json({ error: 'Input contains disallowed patterns' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email }, include: { followedDomains: true } });
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ username: loginStr }, { email: loginStr }] },
+      select: { ...USER_SELECT, passwordHash: true },
+    });
+
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid login or password' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await bcrypt.compare(passwordStr, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid login or password' });
     }
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
     setTokenCookie(req, res, accessToken, false);
     setTokenCookie(req, res, refreshToken, true);
 
-    const { passwordHash: _pw, ...userWithoutPassword } = user;
+    const { passwordHash: _, ...userWithoutPassword } = user;
     res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error('Login error:', error);
