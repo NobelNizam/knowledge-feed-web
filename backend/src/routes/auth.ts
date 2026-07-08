@@ -80,6 +80,7 @@ const USER_SELECT = {
   email: true,
   role: true,
   readingLevel: true,
+  followedDomains: { select: { id: true, name: true } },
 } as const;
 
 // ---- routes ----
