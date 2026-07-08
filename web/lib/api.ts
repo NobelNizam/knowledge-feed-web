@@ -183,7 +183,7 @@ export const userAPI = {
     return response;
   },
 
-  updatePreferences: async (domains: string[], readingLevel = 'intermediate') => {
+  updatePreferences: async (domains: number[], readingLevel = 'intermediate') => {
     const response = await api.put(`/user/preferences`, { domains, readingLevel });
     return response;
   },

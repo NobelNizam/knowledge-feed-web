@@ -20,7 +20,7 @@ export default function Home() {
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const [availableDomains, setAvailableDomains] = useState<{id: number, name: string}[]>([]);
 
   const currentDomainKey = activeFilter.type === 'all' 
     ? '__all__' 
@@ -78,7 +78,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to fetch domains");
     }
-    setAvailableDomains(DOMAIN_LEVEL1_LIST.map((d) => d.name));
+    setAvailableDomains([{id: 0, name: 'Science'}, {id: 0, name: 'History'}, {id: 0, name: 'Technology'}, {id: 0, name: 'Philosophy'}, {id: 0, name: 'Arts'}, {id: 0, name: 'Nature'}]);
   };
 
   if (authLoading) {

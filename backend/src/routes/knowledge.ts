@@ -105,18 +105,12 @@ router.get('/trending', async (req: Request, res: Response) => {
 // GET /api/knowledge/domains
 router.get('/domains', async (_req: Request, res: Response) => {
   try {
-    const domainGroups = await prisma.knowledgeCard.groupBy({
-      by: ['domainId'],
-      _count: { id: true },
-    });
-
-    const domainIds = domainGroups.map((d) => d.domainId);
     const domains = await prisma.domain.findMany({
-      where: { id: { in: domainIds } },
-      select: { name: true },
+      select: { id: true, name: true },
+      orderBy: { id: 'asc' },
     });
 
-    res.json({ success: true, data: domains.map((d) => d.name) });
+    res.json({ success: true, data: domains });
   } catch (error) {
     console.error('Domains error:', error);
     res.status(500).json({ error: 'Failed to fetch domains' });
