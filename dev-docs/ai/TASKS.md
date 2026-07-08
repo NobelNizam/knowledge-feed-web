@@ -11,9 +11,6 @@
 
 | Priority | ID | Status | Task | Repo | Notes |
 |----------|----|--------|------|------|-------|
-| P0 | O1 | Todo | Fix comment endpoint leaking `user.email` — ganti select jadi `{ id, name }` | backend | `knowledge.ts:417,454` |
-| P0 | O2 | Todo | Add CSRF Origin/Referer guard middleware untuk semua POST/PUT/DELETE | backend | Cookie-auth mutating routes |
-| P1 | BRANCH | Todo | Rename branch `docs` → `dev` | both | Sesuai konvensi ai-rules |
 | P1 | O3 | Todo | Return 501 di admin placeholder endpoints | backend | `admin.ts:18,25` |
 | P2 | TEST-FE | Todo | Tambahkan minimal 1 unit test frontend | frontend | `api.ts` interceptor atau `useFeedState` |
 | P2 | O4 | Deferred | Implementasi tsvector full-text search | backend | Ganti ILIKE, tambah GIN index |
@@ -27,7 +24,9 @@
 
 | ID | Task | Completion Date | Notes |
 |----|------|----------------|-------|
-| — | (Belum ada task di tracking system ini) | — | Phase 1-3 audit fixes selesai sebelum tracking system dibuat |
+| O1 | Fix comment endpoint leaking `user.email` | 2026-07-08 | Hapus `email: true` dari 3 tempat select comments |
+| O2 | Add CSRF Origin/Referer guard middleware | 2026-07-08 | `middleware/csrf.ts`, dipasang di `/api` |
+| BRANCH | Rename branch `docs` → `dev` | 2026-07-08 | Branch renamed + committed dev-docs/
 
 ---
 

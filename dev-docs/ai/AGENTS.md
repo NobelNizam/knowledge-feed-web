@@ -13,7 +13,7 @@
 | Repo | Single git at project root |
 | Git Folder | Root (tidak perlu `cd apps` atau `cd backend`) |
 | Code Folders | `backend/` (Express/TypeScript) + `web/` (Next.js) |
-| Active Branch | `docs` (akan rename ke `dev`) |
+| Active Branch | `dev` |
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### Branch and Git Policy
 
-1. Kerja di branch `docs` (atau `feat/*`) — jangan commit ke `main` (belum ada)
+1. Kerja di branch `dev` (atau `feat/*`) — jangan commit ke `main` (belum ada)
 2. Jangan force push
 3. Batch kecil: 1 perubahan jelas → 1 commit → push
 4. Preflight: `git status && git log --oneline -5`

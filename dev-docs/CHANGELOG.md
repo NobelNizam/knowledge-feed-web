@@ -10,9 +10,18 @@
 ### Added
 - `dev-docs/` — dokumentasi development lengkap (PROJECT_CONTEXT, PROJECT_MENTAL_MODEL, MODULE_MAP, CODING_RULES, CURRENT_STATE, START_HERE, dll)
 - `dev-docs/architecture/` — api-flow, backend-structure, database, frontend-structure
-- `dev-docs/modules/` — dokumentasi per-modul untuk 7 modul (auth, feed, knowledge, user, admin, generate, pipeline)
+- `dev-docs/modules/` — dokumentasi per-modul untuk 7 modul
+- `dev-docs/decisions/` — 5 ADR (TypeScript migration, BullMQ, PGVector, NIM, REST-only)
+- `dev-docs/integrations/` — NVIDIA NIM, arXiv API docs
 - `dev-docs/ai/START_HERE.md` — onboarding entry point
 - `dev-docs/ai/AGENTS.md` — repo-specific AI working contract
+
+### Security
+- O1: Comment response `user.email` removed — hanya `{ id, name }` (PII leak fix)
+- O2: CSRF Origin/Referer guard middleware (`middleware/csrf.ts`) untuk semua mutating routes
+
+### Changed
+- Branch `docs` → `dev` (sesuai konvensi ai-rules)
 
 ---
 

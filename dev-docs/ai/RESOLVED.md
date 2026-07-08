@@ -5,6 +5,13 @@
 
 ---
 
+## Resolved (Onboarding, 2026-07-08)
+
+| Date | Area | Issue | Fix |
+|------|------|-------|-----|
+| 2026-07 | `knowledge.ts:417,419,454` | Comment endpoints leak `user.email` di response publik | Hapus `email: true` dari select — ganti ke `{ id, name }` |
+| 2026-07 | All POST/PUT/DELETE | No CSRF guard for cookie-auth mutations | `middleware/csrf.ts` — Origin/Referer header check against FRONTEND_URL |
+
 ## Resolved (Phase 1-3 Audit, 2026-07-06)
 
 | Date | Area | Issue | Fix |
