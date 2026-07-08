@@ -4,6 +4,9 @@ FROM node:18-alpine
 # Set working directory di dalam kontainer
 WORKDIR /app
 
+# Install openssl karena dibutuhkan oleh Prisma Engine di Alpine
+RUN apk add --no-cache openssl
+
 # Salin package.json dan package-lock.json terlebih dahulu untuk memanfaatkan caching Docker layer
 COPY package*.json ./
 
