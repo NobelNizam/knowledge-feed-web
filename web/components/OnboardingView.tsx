@@ -33,11 +33,10 @@ export function OnboardingView({ availableDomains, onComplete }: OnboardingViewP
       if (selectedIds.length > 0) {
         await userAPI.updatePreferences(selectedIds, 'intermediate');
       }
-      onComplete();
     } catch (err) {
       console.error("Failed to save preferences", err);
-      setIsSubmitting(false);
     }
+    onComplete();
   };
 
   const handleSkip = () => {

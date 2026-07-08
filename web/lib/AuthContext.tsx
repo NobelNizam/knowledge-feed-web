@@ -13,7 +13,7 @@ export interface User {
   bio?: string;
   readingLevel?: string;
   role: 'USER' | 'ADMIN';
-  preferences?: UserPreferences;
+  followedDomains?: any[];
   savedCards?: CardData[];
   avatarUrl?: string;
 }

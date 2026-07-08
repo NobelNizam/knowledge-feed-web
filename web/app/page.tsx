@@ -55,7 +55,7 @@ export default function Home() {
     if (!authLoading && !user) {
       router.push('/login');
     } else if (user) {
-      if (!user.preferences?.domains || user.preferences.domains.length === 0) {
+      if (!user.followedDomains || user.followedDomains.length === 0) {
         setShowOnboarding(true);
         fetchAvailableDomains();
         setIsInitialized(true);
