@@ -10,10 +10,10 @@
 
 | Repo | Branch | Last Commit | Notes |
 |------|--------|------------|-------|
-| root (monorepo) | `docs` | `a43ece7` | Docker config + openssl build target |
+| root (monorepo) | `dev` | `5a3eef0` | O1+O2 security fixes applied |
 
 | Last Updated | 2026-07-08 |
-| Updated By | AI (deepseek-v4-pro onboarding analysis) |
+| Updated By | AI (deepseek-v4-pro) |
 
 ---
 
