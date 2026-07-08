@@ -12,7 +12,6 @@ export interface User {
   email: string;
   bio?: string;
   readingLevel?: string;
-  dailyDigest?: boolean;
   role: 'USER' | 'ADMIN';
   preferences?: UserPreferences;
   savedCards?: CardData[];

@@ -80,7 +80,6 @@ const USER_SELECT = {
   email: true,
   role: true,
   readingLevel: true,
-  dailyDigest: true,
 } as const;
 
 // ---- routes ----

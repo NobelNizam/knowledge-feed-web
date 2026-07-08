@@ -19,7 +19,7 @@ const clampLimit = (raw: any, max = 100, fallback = 20): number => {
 router.put('/preferences', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { domains, readingLevel = 'intermediate', dailyDigest } = req.body || {};
+    const { domains, readingLevel = 'intermediate' } = req.body || {};
 
     if (!domains || !Array.isArray(domains)) {
       return res.status(400).json({ error: 'Domains must be a valid array' });
@@ -34,7 +34,6 @@ router.put('/preferences', async (req: Request, res: Response) => {
       where: { id: userId },
       data: {
         readingLevel,
-        ...(dailyDigest !== undefined ? { dailyDigest } : {}),
         followedDomains: { set: domains.map((id: number) => ({ id })) },
       },
     });
@@ -48,7 +47,6 @@ router.put('/preferences', async (req: Request, res: Response) => {
       success: true,
       data: {
         readingLevel: user!.readingLevel,
-        dailyDigest: user!.dailyDigest,
         followedDomains: user!.followedDomains,
       },
     });

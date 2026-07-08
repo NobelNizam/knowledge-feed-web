@@ -26,8 +26,7 @@ model User {
 
   // app-specific (not in ERD, but needed)
   role         String  @default("USER") // USER | ADMIN
-  readingLevel String  @default("intermediate") @map("reading_level")
-  dailyDigest  Boolean @default(true) @map("daily_digest")
+  readingLevel String   @default("intermediate") @map("reading_level")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
