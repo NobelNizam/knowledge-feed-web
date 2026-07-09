@@ -42,6 +42,7 @@ export default function ProfileSettings() {
   }, [user, authLoading, router]);
 
   // Fetch domain id→name mapping from API
+  const [domainsLoading, setDomainsLoading] = useState(true);
   useEffect(() => {
     const fetchDomains = async () => {
       try {
@@ -52,6 +53,7 @@ export default function ProfileSettings() {
           setDomainMap(map);
         }
       } catch { /* use local mapping as fallback */ }
+      setDomainsLoading(false);
     };
     fetchDomains();
   }, []);
@@ -82,11 +84,15 @@ export default function ProfileSettings() {
         throw new Error(profileRes.error || 'Gagal memperbarui profil');
       }
 
-      // 2. Update preferensi domain (onboarding/minat)
-      const domainIds = selectedDomains.map((name) => domainMap.get(name)).filter((id): id is number => id !== undefined);
-      const prefRes = await userAPI.updatePreferences(domainIds, user?.readingLevel || 'intermediate');
-      if (!prefRes.success) {
-        throw new Error(prefRes.error || 'Gagal memperbarui preferensi');
+      // 2. Update preferensi domain (skip if domain map not yet loaded)
+      if (domainsLoading || domainMap.size === 0) {
+        console.warn('Domain map not ready, skipping preference update');
+      } else {
+        const domainIds = selectedDomains.map((name) => domainMap.get(name)).filter((id): id is number => id !== undefined);
+        const prefRes = await userAPI.updatePreferences(domainIds, user?.readingLevel || 'intermediate');
+        if (!prefRes.success) {
+          throw new Error(prefRes.error || 'Gagal memperbarui preferensi');
+        }
       }
 
       // Refresh data user di context
@@ -323,7 +329,7 @@ export default function ProfileSettings() {
         {/* Save Button */}
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || domainsLoading}
           className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md hover:bg-primary/95 transition-all flex items-center justify-center gap-2 text-sm disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
         >
           {saving ? (
