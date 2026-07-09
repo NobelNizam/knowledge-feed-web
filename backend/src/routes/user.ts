@@ -5,6 +5,77 @@ import prisma from '../lib/prisma';
 
 const router: Router = express.Router();
 
+// GET /api/user/:id — public profile (no auth required)
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+
+    const user = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true, username: true, displayName: true, bio: true, avatarUrl: true, createdAt: true,
+        _count: { select: { followers: true, following: true } },
+      },
+    });
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    let isFollowing = false;
+    if (req.cookies?.token) {
+      try {
+        const jwt = await import('jsonwebtoken');
+        const { JWT_SECRET } = await import('../lib/jwtSecrets');
+        const decoded = jwt.default.verify(req.cookies.token, JWT_SECRET) as { userId: number };
+        const follow = await prisma.follow.findUnique({
+          where: { followerId_followingId: { followerId: decoded.userId, followingId: targetId } },
+        });
+        isFollowing = !!follow;
+      } catch {}
+    }
+
+    res.json({
+      success: true,
+      data: { ...user, followerCount: user._count.followers, followingCount: user._count.following, isFollowing },
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// GET /api/user/:id/followers — public
+router.get('/:id/followers', async (req: Request, res: Response) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+    const followers = await prisma.follow.findMany({
+      where: { followingId: targetId },
+      include: { follower: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
+    });
+    res.json({ success: true, data: followers.map(f => f.follower) });
+  } catch (error) {
+    console.error('Followers error:', error);
+    res.status(500).json({ error: 'Failed to fetch followers' });
+  }
+});
+
+// GET /api/user/:id/following — public
+router.get('/:id/following', async (req: Request, res: Response) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+    const following = await prisma.follow.findMany({
+      where: { followerId: targetId },
+      include: { following: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
+    });
+    res.json({ success: true, data: following.map(f => f.following) });
+  } catch (error) {
+    console.error('Following error:', error);
+    res.status(500).json({ error: 'Failed to fetch following' });
+  }
+});
+
 // Protect all user routes
 router.use(authMiddleware);
 
@@ -164,40 +235,6 @@ router.post('/:id/follow', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Follow error:', error);
     res.status(500).json({ error: 'Failed to toggle follow' });
-  }
-});
-
-// GET /api/user/:id/followers
-router.get('/:id/followers', async (req: Request, res: Response) => {
-  try {
-    const targetId = Number(req.params.id);
-    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
-
-    const followers = await prisma.follow.findMany({
-      where: { followingId: targetId },
-      include: { follower: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
-    });
-    res.json({ success: true, data: followers.map(f => f.follower) });
-  } catch (error) {
-    console.error('Followers error:', error);
-    res.status(500).json({ error: 'Failed to fetch followers' });
-  }
-});
-
-// GET /api/user/:id/following
-router.get('/:id/following', async (req: Request, res: Response) => {
-  try {
-    const targetId = Number(req.params.id);
-    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
-
-    const following = await prisma.follow.findMany({
-      where: { followerId: targetId },
-      include: { following: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
-    });
-    res.json({ success: true, data: following.map(f => f.following) });
-  } catch (error) {
-    console.error('Following error:', error);
-    res.status(500).json({ error: 'Failed to fetch following' });
   }
 });
 

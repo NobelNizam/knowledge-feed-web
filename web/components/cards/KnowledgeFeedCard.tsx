@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Heart, MessageCircle, Bookmark, Share, ThumbsDown, Flag, Eye } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, Share, ThumbsDown, Flag, Eye, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -26,8 +26,10 @@ export interface KnowledgeFeedCardProps {
     likeCount?: number;
     dislikeCount?: number;
     shareCount?: number;
+    repostCount?: number;
     liked?: boolean;
     disliked?: boolean;
+    reposted?: boolean;
     saved?: boolean;
     commentsCount?: number;
     createdAt?: string;
@@ -77,6 +79,8 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   const [saveCount, setSaveCount] = useState(card.saveCount || 0);
   const [viewCount, setViewCount] = useState(card.viewCount || 0);
   const [commentsCount, setCommentsCount] = useState(card.commentsCount || 0);
+  const [reposted, setReposted] = useState(card.reposted || false);
+  const [repostCount, setRepostCount] = useState(card.repostCount || 0);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
@@ -103,14 +107,16 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
     if (card.saveCount !== undefined) setSaveCount(card.saveCount);
     if (card.viewCount !== undefined) setViewCount(card.viewCount);
     if (card.commentsCount !== undefined) setCommentsCount(card.commentsCount);
-  }, [card.liked, card.likeCount, card.disliked, card.dislikeCount, card.saved, card.saveCount, card.viewCount, card.commentsCount]);
+    if (card.reposted !== undefined) setReposted(card.reposted);
+    if (card.repostCount !== undefined) setRepostCount(card.repostCount);
+  }, [card.liked, card.likeCount, card.disliked, card.dislikeCount, card.saved, card.saveCount, card.viewCount, card.commentsCount, card.reposted, card.repostCount]);
 
   // Global Event Listener untuk sinkronisasi antar komponen secara real-time
   useEffect(() => {
     const handleInteraction = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail && customEvent.detail.cardId === card.id) {
-        const { liked: newLiked, likeCount: newLikeCount, disliked: newDisliked, dislikeCount: newDislikeCount, saved: newSaved, saveCount: newSaveCount, viewCount: newViewCount, commentsCount: newCommentsCount } = customEvent.detail;
+        const { liked: newLiked, likeCount: newLikeCount, disliked: newDisliked, dislikeCount: newDislikeCount, saved: newSaved, saveCount: newSaveCount, viewCount: newViewCount, commentsCount: newCommentsCount, reposted: newReposted, repostCount: newRepostCount } = customEvent.detail;
         if (newLiked !== undefined) setLiked(newLiked);
         if (newLikeCount !== undefined) setLikeCount(newLikeCount);
         if (newDisliked !== undefined) setDisliked(newDisliked);
@@ -119,6 +125,8 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
         if (newSaveCount !== undefined) setSaveCount(newSaveCount);
         if (newViewCount !== undefined) setViewCount(newViewCount);
         if (newCommentsCount !== undefined) setCommentsCount(newCommentsCount);
+        if (newReposted !== undefined) setReposted(newReposted);
+        if (newRepostCount !== undefined) setRepostCount(newRepostCount);
       }
     };
 
@@ -224,6 +232,47 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
       }));
       updateCardInCache(card.id, { liked: previousLiked, disliked: previousDisliked, likeCount: previousLikeCount, dislikeCount: previousDislikeCount });
       console.error('Failed to toggle dislike:', error);
+    }
+  };
+
+  const handleRepost = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const prevReposted = reposted;
+    const prevRepostCount = repostCount;
+    const newReposted = !reposted;
+    const newRepostCount = reposted ? repostCount - 1 : repostCount + 1;
+
+    setReposted(newReposted);
+    setRepostCount(newRepostCount);
+
+    window.dispatchEvent(new CustomEvent('card-interaction', {
+      detail: { cardId: card.id, reposted: newReposted, repostCount: newRepostCount }
+    }));
+    updateCardInCache(card.id, { reposted: newReposted, repostCount: newRepostCount });
+
+    try {
+      const res = await interactionAPI.repostCard(card.id);
+      if (res.success) {
+        setReposted(res.reposted);
+        setRepostCount(res.repostCount);
+        window.dispatchEvent(new CustomEvent('card-interaction', {
+          detail: { cardId: card.id, reposted: res.reposted, repostCount: res.repostCount }
+        }));
+        updateCardInCache(card.id, { reposted: res.reposted, repostCount: res.repostCount });
+      }
+    } catch (error) {
+      setReposted(prevReposted);
+      setRepostCount(prevRepostCount);
+      window.dispatchEvent(new CustomEvent('card-interaction', {
+        detail: { cardId: card.id, reposted: prevReposted, repostCount: prevRepostCount }
+      }));
+      updateCardInCache(card.id, { reposted: prevReposted, repostCount: prevRepostCount });
+      console.error('Failed to toggle repost:', error);
     }
   };
 
@@ -360,6 +409,16 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
           >
             <ThumbsDown className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", disliked ? "fill-amber-500 text-amber-500" : "text-muted-foreground group-hover:text-amber-500")} />
             {dislikeCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", disliked ? "text-amber-500" : "text-muted-foreground group-hover:text-amber-500")}>{abbr(dislikeCount)}</span>}
+          </button>
+
+          {/* Repost */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleRepost(e); }}
+            className="flex items-center gap-1 sm:gap-1.5 group h-9 min-w-[36px] px-1.5 sm:px-2 justify-center rounded-full hover:bg-green-500/10 transition-colors"
+            title="Repost"
+          >
+            <RefreshCw className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-colors", reposted ? "text-green-500" : "text-muted-foreground group-hover:text-green-500")} />
+            {repostCount > 0 && <span className={cn("text-[11px] sm:text-xs font-medium", reposted ? "text-green-500" : "text-muted-foreground group-hover:text-green-500")}>{abbr(repostCount)}</span>}
           </button>
 
           {/* Comment */}

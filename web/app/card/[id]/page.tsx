@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { knowledgeAPI, interactionAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
@@ -203,9 +204,9 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm text-foreground">
+                        <Link href={`/user/${comment.user?.id}`} className="font-semibold text-sm text-foreground hover:underline">
                           {comment.user?.displayName || 'Pengguna'}
-                        </span>
+                        </Link>
                         <span className="text-xs text-muted-foreground">
                           {new Date(comment.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                         </span>
@@ -242,9 +243,9 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-xs text-foreground">
+                              <Link href={`/user/${reply.user?.id}`} className="font-semibold text-xs text-foreground hover:underline">
                                 {reply.user?.displayName || 'Pengguna'}
-                              </span>
+                              </Link>
                               <span className="text-[10px] text-muted-foreground">
                                 {new Date(reply.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                               </span>

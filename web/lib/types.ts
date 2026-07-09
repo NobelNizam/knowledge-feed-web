@@ -21,8 +21,10 @@ export interface CardData {
   likeCount?: number;
   dislikeCount?: number;
   shareCount?: number;
+  repostCount?: number;
   liked?: boolean;
   disliked?: boolean;
+  reposted?: boolean;
   saved?: boolean;
   commentsCount?: number;
   createdAt?: string;
