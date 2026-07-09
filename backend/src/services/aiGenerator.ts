@@ -240,19 +240,34 @@ export async function generateKnowledgeCards(count = 5, domains: string[] | null
   const cardsData = await generateWithRAG({ count, domains });
 
   const createdCards = await Promise.all(
-    cardsData.map((card) =>
-      prisma.knowledgeCard.create({
+    cardsData.map(async (card) => {
+      const resolvedDomain = await prisma.domain.upsert({
+        where: { name: card.domain },
+        update: {},
+        create: { name: card.domain },
+      });
+
+      return prisma.knowledgeCard.create({
         data: {
           title: card.title,
           content: card.content,
-          domain: card.domain,
-          tags: card.tags,
+          domainId: resolvedDomain.id,
           type: card.type,
           aiModel: card.aiModel,
           sourceName: card.sourceName,
+          hashtags: {
+            create: (card.tags || []).map((tagName: string) => ({
+              tag: {
+                connectOrCreate: {
+                  where: { name: tagName },
+                  create: { name: tagName, domainId: resolvedDomain.id },
+                },
+              },
+            })),
+          },
         },
-      })
-    )
+      });
+    })
   );
 
   return createdCards;

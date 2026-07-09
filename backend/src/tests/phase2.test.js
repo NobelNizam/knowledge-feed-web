@@ -23,24 +23,24 @@ describe('Phase 2.10 — composite indexes declared in schema', () => {
     'utf8'
   );
 
-  test('declares (domain, createdAt) composite index on KnowledgeCard', () => {
-    expect(schema).toMatch(/@@index\(\[domain,\s*createdAt\(sort:\s*Desc\)\]/);
+  test('declares (domainId, createdAt) composite index on KnowledgeCard', () => {
+    expect(schema).toMatch(/@@index\(\[domainId,\s*createdAt\(sort:\s*Desc\)\]/);
   });
 
   test('declares (createdAt, engagementScore) composite index on KnowledgeCard', () => {
     expect(schema).toMatch(/@@index\(\[createdAt,\s*engagementScore\(sort:\s*Desc\)\]/);
   });
 
-  test('declares cardId index on View', () => {
-    expect(schema).toMatch(/model View[\s\S]*@@index\(\[cardId\]/);
+  test('declares postId index on PostView', () => {
+    expect(schema).toMatch(/model PostView[\s\S]*@@index\(\[postId\]/);
   });
 
-  test('declares userId index on View', () => {
-    expect(schema).toMatch(/model View[\s\S]*@@index\(\[userId\]/);
+  test('declares userId index on PostView', () => {
+    expect(schema).toMatch(/model PostView[\s\S]*@@index\(\[userId\]/);
   });
 
-  test('declares cardId index on Comment', () => {
-    expect(schema).toMatch(/model Comment[\s\S]*@@index\(\[cardId\]/);
+  test('declares postId index on Comment', () => {
+    expect(schema).toMatch(/model Comment[\s\S]*@@index\(\[postId\]/);
   });
 });
 
@@ -58,9 +58,9 @@ describe('Phase 2.10 — phase2 migration SQL exists', () => {
     );
     expect(sql).toMatch(/idx_knowledge_cards_domain_created/);
     expect(sql).toMatch(/idx_knowledge_cards_created_engagement/);
-    expect(sql).toMatch(/idx_views_card_id/);
-    expect(sql).toMatch(/idx_views_user_id/);
-    expect(sql).toMatch(/idx_comments_card_id/);
+    expect(sql).toMatch(/idx_post_views_post_id/);
+    expect(sql).toMatch(/idx_post_views_user_id/);
+    expect(sql).toMatch(/idx_comments_post_id/);
   });
 });
 

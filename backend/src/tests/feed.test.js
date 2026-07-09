@@ -4,10 +4,18 @@ const { invalidateAllFeedCache } = require('../services/cacheService');
 
 describe('Feed and Filter Endpoints', () => {
   let mockCards = [];
+  let domainScience, domainHistory, domainTechnology;
 
   beforeAll(async () => {
     // Bersihkan cache sebelum test
     await invalidateAllFeedCache();
+
+    // Resolve domain IDs for v2 schema
+    [domainScience, domainHistory, domainTechnology] = await Promise.all([
+      prisma.domain.upsert({ where: { name: 'science' }, update: {}, create: { name: 'science' } }),
+      prisma.domain.upsert({ where: { name: 'history' }, update: {}, create: { name: 'history' } }),
+      prisma.domain.upsert({ where: { name: 'technology' }, update: {}, create: { name: 'technology' } }),
+    ]);
 
     // Buat data tiruan untuk pengetesan jika database kosong
     const count = await prisma.knowledgeCard.count();
@@ -17,7 +25,7 @@ describe('Feed and Filter Endpoints', () => {
           data: {
             title: 'Test Science Post',
             content: 'Science content detail here.',
-            domain: 'science',
+            domainId: domainScience.id,
             type: 'QUICK_FACT'
           }
         }),
@@ -25,7 +33,7 @@ describe('Feed and Filter Endpoints', () => {
           data: {
             title: 'Test History Post',
             content: 'History content detail here.',
-            domain: 'history',
+            domainId: domainHistory.id,
             type: 'QUICK_FACT'
           }
         }),
@@ -33,7 +41,7 @@ describe('Feed and Filter Endpoints', () => {
           data: {
             title: 'Test Technology Post',
             content: 'Tech content detail here.',
-            domain: 'technology',
+            domainId: domainTechnology.id,
             type: 'QUICK_FACT'
           }
         })
@@ -70,7 +78,7 @@ describe('Feed and Filter Endpoints', () => {
   });
 
   it('should filter feed by domain successfully', async () => {
-    const domainToTest = mockCards[0]?.domain || 'science';
+    const domainToTest = 'science';
     const res = await request(app)
       .get(`/api/feed?domains=${domainToTest}&limit=5`);
 

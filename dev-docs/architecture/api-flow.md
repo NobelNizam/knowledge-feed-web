@@ -29,12 +29,12 @@ Detail middleware pipeline (berdasarkan `backend/src/index.ts:22-93`):
 
 ### Registration
 ```
-POST /api/auth/register { name, email, password }
-  → email format validation
+POST /api/auth/register { username, displayName, email?, password }
+  → username + email format validation
   → password length >= 8
-  → check duplicate email
+  → check duplicate username/email
   → bcrypt hash (rounds 10)
-  → create User + UserPreferences
+  → create User
   → generateTokens() → JWT access (15m) + JWT refresh (7d, jti unique)
   → SHA-256 hash refreshToken → store in Session table
   → setTokenCookie(): httpOnly, secure (production/HTTPS), sameSite (none/lax)
@@ -43,11 +43,11 @@ POST /api/auth/register { name, email, password }
 
 ### Login
 ```
-POST /api/auth/login { email, password }
-  → find user by email
+POST /api/auth/login { login, password }
+  → find user by username OR email
   → bcrypt compare
   → generateTokens() → set cookies
-  → return user (minus password) + preferences
+  → return user (minus passwordHash) + readingLevel
 ```
 
 ### Token Refresh
@@ -81,8 +81,8 @@ POST /api/auth/logout (cookie: refreshToken)
   → cache hit → filter by excludeIds → enrich → return
   → cache miss → populateCacheIfNeeded (DB query + set cache) → enrich → return
   → enrichCardInteractions(): Promise.all([
-      likes groupBy, dislikes groupBy, userLikes, userDislikes,
-      comments groupBy, user savedCards
+      reactions groupBy (LIKE/DISLIKE), userReactions,
+      comments groupBy, user bookmarks
     ]) — 1 round trip DB
 ```
 
@@ -108,23 +108,24 @@ POST /api/auth/logout (cookie: refreshToken)
 
 ---
 
-## Mutation Flow (Like/View/Share/Dislike/Report/Comment)
+## Mutation Flow (Reaction/PostView/Repost/Bookmark/Report/Comment)
 
-### Like Toggle
+### Reaction Toggle (unified LIKE/DISLIKE)
 ```
-POST /api/knowledge/:id/like (authenticated)
+POST /api/knowledge/:id/reaction (authenticated)
+  { reactionType: "LIKE" | "DISLIKE" }
   → find card
-  → findExisting like (userId, cardId)
-  → exists → delete like (unlike)
-  → not exists → create like
-  → count likes → updateEngagementScore(cardId)
-  → formula: L*3 + D*(-3) + C*5 + V*1 + S*4
+  → findExisting reaction (userId, postId, reactionType)
+  → exists → delete reaction (undo)
+  → not exists → upsert reaction (replace opposite type if exists)
+  → count reactions by type → updateEngagementScore(cardId)
+  → formula: L*3 + D*(-3) + C*5 + V*1 + S*4 + R*2
 ```
 
-### View Tracking
+### PostView Tracking
 ```
 POST /api/knowledge/:id/view (optional auth)
-  → authenticated: findExisting view → not exists → create view → isNewUniqueView = true
+  → authenticated: findExisting view (userId, postId) → not exists → create PostView → isNewUniqueView = true
   → anonymous: markAnonymousViewIfNew(fingerprint)
     → Redis SETNX SHA-256(salt+ip+ua+cardId) TTL 24h
   → isNewUniqueView → increment viewCount → updateEngagementScore

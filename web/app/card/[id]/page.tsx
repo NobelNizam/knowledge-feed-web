@@ -165,7 +165,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
             <div className="flex-1">
               {replyingTo && (
                 <div className="mb-2 p-2 bg-muted rounded-lg flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Membalas <strong>@{replyingTo.user?.name || 'User'}</strong>: &ldquo;{replyingTo.content.substring(0, 30)}&rdquo;</span>
+                  <span>Membalas <strong>@{replyingTo.user?.displayName || 'User'}</strong>: &ldquo;{replyingTo.content.substring(0, 30)}&rdquo;</span>
                   <button onClick={() => setReplyingTo(null)} className="text-destructive font-bold ml-2">Batal</button>
                 </div>
               )}
@@ -199,12 +199,12 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                   {/* Komentar Utama */}
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm shrink-0 font-bold">
-                      {(comment.user?.name || 'U').substring(0, 1).toUpperCase()}
+                      {(comment.user?.displayName || 'U').substring(0, 1).toUpperCase()}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-sm text-foreground">
-                          {comment.user?.name || 'Pengguna'}
+                          {comment.user?.displayName || 'Pengguna'}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {new Date(comment.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
@@ -238,12 +238,12 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                       {comment.replies.map((reply: CommentData) => (
                         <div key={reply.id} className="flex items-start gap-2.5">
                           <div className="w-6 h-6 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-xs shrink-0 font-bold">
-                            {(reply.user?.name || 'U').substring(0, 1).toUpperCase()}
+                            {(reply.user?.displayName || 'U').substring(0, 1).toUpperCase()}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-xs text-foreground">
-                                {reply.user?.name || 'Pengguna'}
+                                {reply.user?.displayName || 'Pengguna'}
                               </span>
                               <span className="text-[10px] text-muted-foreground">
                                 {new Date(reply.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}

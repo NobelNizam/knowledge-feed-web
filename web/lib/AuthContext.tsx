@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from './api';
 import { useRouter } from 'next/navigation';
-import type { UserPreferences, CardData } from './types';
+import type { CardData } from './types';
 
 export interface User {
   id: number;
@@ -14,7 +14,7 @@ export interface User {
   readingLevel?: string;
   role: 'USER' | 'ADMIN';
   followedDomains?: any[];
-  savedCards?: CardData[];
+  bookmarks?: CardData[];
   avatarUrl?: string;
 }
 

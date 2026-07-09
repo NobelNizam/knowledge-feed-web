@@ -3,7 +3,8 @@ const { app, prisma } = require('../index');
 
 describe('Auth Endpoints', () => {
   const testUser = {
-    name: 'Test User',
+    username: `testuser_${Date.now()}`,
+    displayName: 'Test User',
     email: `test_${Date.now()}@example.com`,
     password: 'password123'
   };
@@ -11,7 +12,6 @@ describe('Auth Endpoints', () => {
   afterAll(async () => {
     // Cleanup
     await prisma.session.deleteMany({ where: { user: { email: testUser.email } } });
-    await prisma.userPreferences.deleteMany({ where: { user: { email: testUser.email } } });
     await prisma.user.deleteMany({ where: { email: testUser.email } });
     await prisma.$disconnect();
   });
@@ -33,14 +33,14 @@ describe('Auth Endpoints', () => {
       .send(testUser);
     
     expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('error', 'Email already in use');
+    expect(res.body).toHaveProperty('error', 'Username already in use');
   });
 
   it('should login successfully', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
-        email: testUser.email,
+        login: testUser.email,
         password: testUser.password
       });
     
@@ -57,7 +57,7 @@ describe('Auth Endpoints', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
-        email: testUser.email,
+        login: testUser.email,
         password: 'wrongpassword'
       });
     

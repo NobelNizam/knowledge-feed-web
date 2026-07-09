@@ -147,14 +147,14 @@ describe('Phase 3 bonus — backend migrated to TypeScript', () => {
     );
     expect(tsconfig.compilerOptions.allowJs).toBe(true);
     expect(tsconfig.compilerOptions.strict).toBe(true);
-    expect(tsconfig.compilerOptions.noEmit).toBe(true);
+    expect(tsconfig.compilerOptions.outDir).toBe('dist');
   });
 
   test('package.json uses tsx for start/dev scripts and lists ts-jest', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')
     );
-    expect(pkg.scripts.start).toMatch(/tsx/);
+    expect(pkg.scripts.start).toMatch(/node/);
     expect(pkg.scripts.dev).toMatch(/tsx/);
     expect(pkg.devDependencies).toHaveProperty('tsx');
     expect(pkg.devDependencies).toHaveProperty('typescript');

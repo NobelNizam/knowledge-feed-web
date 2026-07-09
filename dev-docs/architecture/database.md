@@ -9,7 +9,7 @@
 
 | Connection | Driver | Host | Schema | Notes |
 |-----------|--------|------|--------|-------|
-| `DATABASE_URL` | PostgreSQL (pgvector) | localhost:5432 (dev) / Neon serverless (production) | `knowledge_feed` | Primary DB — 11 model via Prisma, PGVector extension via raw SQL |
+| `DATABASE_URL` | PostgreSQL (pgvector) | localhost:5432 (dev) / Neon serverless (production) | `knowledge_feed` | Primary DB — 19 model via Prisma, PGVector extension via raw SQL |
 | `REDIS_URL` | Redis | localhost:6379 (dev) / Upstash (production) | db 0 | Cache + queue backend (BullMQ) |
 
 ---
@@ -19,52 +19,71 @@
 | Path | Domain |
 |------|--------|
 | `backend/prisma/migrations/` | All migrations — Prisma auto-generate |
-| `backend/prisma/schema.prisma` | Schema source of truth — 11 models |
+| `backend/prisma/schema.prisma` | Schema source of truth — 19 models |
 
 ---
 
-## Models (11 Prisma Models)
+## Models (19 Prisma Models)
 
 | Model | Table | Purpose | Key Fields |
 |-------|-------|---------|------------|
-| KnowledgeCard | `knowledge_cards` | AI-generated content cards | title, content, domain, tags, engagementScore, moderationStatus, citations (JSON), sourceChunkIds, factChecked |
-| User | `users` | Registered users | name, email (unique), password (bcrypt), role (USER/ADMIN), avatarUrl |
-| Session | `sessions` | Refresh token persistence | refreshToken (SHA-256 hash, unique), userId, userAgent, ipAddress, expiresAt |
-| UserPreferences | `user_preferences` | User domain preferences | domains (String[]), readingLevel |
+| User | `users` | Registered users | username (unique), email? (unique), passwordHash, displayName, bio, avatarUrl, role (USER/ADMIN), readingLevel |
+| Session | `sessions` | Refresh token persistence | refreshToken (SHA-256 hash, unique), userId, deviceInfo, ipAddress, isRevoked, expiresAt |
+| Domain | `domains` | Knowledge domains | name (unique), parentDomainId (self-referential hierarchy) |
+| Hashtag | `hashtags` | Normalized hashtags | name (unique), domainId (FK → domains) |
+| PostHashtag | `post_hashtags` | M:N join: card ↔ hashtag | postId, tagId (composite PK) |
+| UserFollowDomain | `user_follow_domains` | User domain subscriptions | userId, domainId (@@unique) |
+| KnowledgeCard | `knowledge_cards` | AI-generated content cards | title, content, type, domainId (FK → domains), sourceUrl, sourceName, aiModel, engagementScore, moderationStatus, citations (JSON), sourceChunkIds (String[]), sourceData (JSON?), factCheckScore |
+| Reaction | `reactions` | Unified LIKE/DISLIKE | userId, postId, reactionType (enum: LIKE/DISLIKE), @@unique([userId, postId, reactionType]) |
+| Repost | `reposts` | Card reposts | userId, postId (@@unique) |
+| Bookmark | `bookmarks` | Saved cards | userId, postId (@@unique) |
+| Follow | `follows` | User follows user | followerId, followingId (@@unique) |
+| Mention | `mentions` | Comment @mentions | commentId, mentionedUserId (@@unique) |
+| PostView | `post_views` | Card view tracking | userId (nullable), postId, viewedAt, @@unique([userId, postId]) |
+| Comment | `comments` | Card comments + replies | content, userId, postId, parentId (self-referential), isDeleted |
+| Report | `reports` | User reports | reason (String), reportedPostId (nullable FK), reportedCommentId (nullable FK), status (pending/reviewed/resolved), resolvedByUserId |
+| ContentVerification | `content_verifications` | Fact-check sourcing | postId, sourceName, sourceUrl, factChecker, status (verified/unverified/disputed) |
 | KnowledgeSource | `knowledge_sources` | arXiv paper metadata | externalId (unique), sourceType, title, authors[], abstract, contentHash (SHA-256 dedup), status |
-| DocumentChunk | `document_chunks` | Text chunks + embeddings | content, chunkIndex, tokenCount, embedded flag, embedding column via raw SQL (vector(1024)) |
-| FactCheckResult | `fact_check_results` | Claim verification | claim, verified, confidence, sourceType, sourceUrl |
-| PipelineJob | `pipeline_jobs` | Pipeline execution tracking | bullmqJobId, type, status, input (JSON), output (JSON), currentStep, progress |
-| Like | `likes` | Card likes | userId, cardId (unique composite) |
-| Dislike | `dislikes` | Card dislikes | userId, cardId (unique composite) |
-| View | `views` | Card view tracking | userId (nullable), cardId |
-| Comment | `comments` | Card comments + replies | content, userId, cardId, parentId (self-referential) |
-| Report | `reports` | User reports | reasons (String[]), userId, cardId (unique composite) |
+| DocumentChunk | `document_chunks` | Text chunks + embeddings | content, chunkIndex, tokenCount, sourceId, embedded flag, embedding column via raw SQL (vector(1024)) |
+| FactCheckResult | `fact_check_results` | Claim verification | claim, verified, confidence, sourceType, sourceUrl, cardId |
+| PipelineJob | `pipeline_jobs` | Pipeline execution tracking | bullmqJobId (unique), type, status, input (JSON), output (JSON), currentStep, progress |
+
+**Deleted models (v1→v2):**
+- `Like` / `Dislike` → unified into `Reaction` with `reactionType` enum
+- `View` → renamed to `PostView`
+- `UserPreferences` → `readingLevel` folded into User, `domains[]` replaced by `UserFollowDomain`
+- `savedCards` implicit relation → explicit `Bookmark` model
 
 ---
 
-## Key Indexes (Post-audit Fase 2)
+## Key Indexes (v2)
 
 | Index | Table | Purpose |
 |--------|-------|---------|
-| `@@index([domain, createdAt DESC])` | knowledge_cards | Feed query: `WHERE domain IN (...) ORDER BY createdAt DESC` |
-| `@@index([createdAt, engagementScore DESC])` | knowledge_cards | Trending query: `WHERE createdAt >= 7d ORDER BY engagementScore DESC` |
+| `@@index([domainId, createdAt(sort: Desc)], map: "idx_knowledge_cards_domain_created")` | knowledge_cards | Feed query: `WHERE domainId IN (...) ORDER BY createdAt DESC` |
+| `@@index([createdAt, engagementScore(sort: Desc)], map: "idx_knowledge_cards_created_engagement")` | knowledge_cards | Trending query: `WHERE createdAt >= 7d ORDER BY engagementScore DESC` |
 | `@@index([moderationStatus])` | knowledge_cards | Moderation filter |
 | `@@unique([sourceId, chunkIndex])` | document_chunks | Dedup per source |
-| `@@unique([userId, cardId])` | likes, dislikes, reports | One interaction per user per card |
-| `@@index([cardId])` | views, comments | Card detail queries |
-| `@@index([userId])` | views | User view history |
-| `@@unique([userId, cardId])` | views | Dedup per authenticated user |
+| `@@unique([userId, postId, reactionType])` | reactions | One reaction type per user per post |
+| `@@unique([userId, postId])` | bookmarks, reposts | One per user per post |
+| `@@unique([userId, postId])` | post_views | Dedup per authenticated user |
+| `@@index([postId])` | post_views, comments | Card detail queries |
+| `@@index([userId])` | post_views | User view history |
+| `@@unique([followerId, followingId])` | follows | One follow relationship per pair |
+| `@@unique([commentId, mentionedUserId])` | mentions | Dedup mention per comment |
+| `@@unique([userId, domainId])` | user_follow_domains | One subscription per user-domain |
 
 ---
 
 ## Cross-Database Relationship Style
 
 Single database, no cross-DB queries. Semua relasi via Prisma foreign keys dengan `onDelete: Cascade`:
-- Cascade delete: KnowledgeCard → likes, dislikes, views, comments, reports, factCheckResults
-- Cascade delete: User → sessions, preferences, likes, dislikes, views, comments, reports
+- Cascade delete: KnowledgeCard → reactions, reposts, bookmarks, postViews, comments, reports, factCheckResults, contentVerifications, postHashtags
+- Cascade delete: User → sessions, followedDomains, reactions, reposts, bookmarks, followers, following, postViews, comments, reportsFiled, reportsResolved, mentions
+- Cascade delete: Domain → hashtags, followedBy, posts
+- Cascade delete: Hashtag → postHashtags
 - Cascade delete: KnowledgeSource → DocumentChunk
-- Cascade delete: Comment → replies (self-referential)
+- Cascade delete: Comment → replies (self-referential), mentions
 
 ---
 

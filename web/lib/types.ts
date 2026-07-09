@@ -6,11 +6,6 @@ export interface ApiResponse {
   [key: string]: any;
 }
 
-export interface UserPreferences {
-  domains: string[];
-  readingLevel?: string;
-}
-
 export interface CardData {
   id: number;
   title: string;
@@ -39,7 +34,7 @@ export interface CommentData {
   id: number;
   content: string;
   createdAt: string;
-  user?: { name: string };
+  user?: { id: number; displayName: string };
   replies?: CommentData[];
   parentId?: number;
 }

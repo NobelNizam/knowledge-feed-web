@@ -108,15 +108,16 @@ router.post('/save', async (req: Request, res: Response) => {
 router.put('/profile', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { name, avatarUrl } = req.body || {};
+    const { name, displayName: rawDisplayName, avatarUrl } = req.body || {};
+    const resolvedDisplayName = rawDisplayName || name;
 
-    if (!name || !name.trim()) {
+    if (!resolvedDisplayName || !resolvedDisplayName.trim()) {
       return res.status(400).json({ error: 'Nama tidak boleh kosong' });
     }
 
     const existingUser = await prisma.user.findFirst({
       where: {
-        displayName: { equals: name.trim(), mode: 'insensitive' },
+        displayName: { equals: resolvedDisplayName.trim(), mode: 'insensitive' },
         id: { not: userId },
       },
     });
@@ -127,7 +128,7 @@ router.put('/profile', async (req: Request, res: Response) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { displayName: name.trim(), avatarUrl },
+      data: { displayName: resolvedDisplayName.trim(), avatarUrl },
     });
 
     res.json({ success: true, data: updatedUser });

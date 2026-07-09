@@ -86,8 +86,8 @@ export function KnowledgeFeedCard({ card, isDetailView = false }: KnowledgeFeedC
   
   // Set initial saved state based on user context
   useEffect(() => {
-    if (user && user.savedCards) {
-      setSaved(user.savedCards.some(c => c.id === card.id));
+    if (user && user.bookmarks) {
+      setSaved(user.bookmarks.some(c => c.id === card.id));
     } else {
       setSaved(card.saved || false);
     }

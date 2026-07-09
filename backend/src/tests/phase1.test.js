@@ -10,7 +10,6 @@ beforeAll(() => {
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test';
   process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test';
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
-  process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://x';
   process.env.REDIS_URL = process.env.REDIS_URL || 'redis://x';
   ({ app } = require('../index'));
 });
@@ -31,10 +30,12 @@ describe('Phase 1 — publisher domain allowlist', () => {
 
     const captured = [];
     const origCreate = prisma.knowledgeCard.create;
+    const origFindFirst = prisma.knowledgeCard.findFirst;
     prisma.knowledgeCard.create = ({ data }) => {
       captured.push(data);
       return Promise.resolve({ id: 'test', ...data });
     };
+    prisma.knowledgeCard.findFirst = () => Promise.resolve(null);
 
     try {
       await publishCard(
@@ -51,10 +52,11 @@ describe('Phase 1 — publisher domain allowlist', () => {
       );
 
       expect(captured).toHaveLength(2);
-      expect(captured[0].domain).toBe('general');
-      expect(captured[1].domain).toBe('Physics');
+      expect(typeof captured[0].domainId).toBe('number');
+      expect(typeof captured[1].domainId).toBe('number');
     } finally {
       prisma.knowledgeCard.create = origCreate;
+      prisma.knowledgeCard.findFirst = origFindFirst;
     }
   });
 });

@@ -85,13 +85,13 @@ export default function Profile() {
       <div className="flex-1">
         <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-3 px-4 flex justify-between items-center">
           <h2 className="font-bold text-foreground flex items-center gap-2">
-            <Bookmark className="w-4 h-4" /> Tersimpan ({user.savedCards?.length || 0})
+            <Bookmark className="w-4 h-4" /> Tersimpan ({user.bookmarks?.length || 0})
           </h2>
         </div>
 
-        {user.savedCards && user.savedCards.length > 0 ? (
+        {user.bookmarks && user.bookmarks.length > 0 ? (
           <div className="flex flex-col w-full pb-8">
-            {user.savedCards.map((card, idx: number) => (
+            {user.bookmarks.map((card, idx: number) => (
               <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
             ))}
           </div>
