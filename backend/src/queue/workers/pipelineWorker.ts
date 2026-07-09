@@ -113,8 +113,14 @@ export async function executePipeline(
     if (rawPapers.length === 0) {
       console.log('[Pipeline] No papers found, falling back to direct generation');
       await updateProgress(pipelineJobId, 'generate_fallback', 50);
-      const cards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
-      for (const cardData of cards) {
+      let fallbackCards: any[] = [];
+      try {
+        fallbackCards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
+      } catch (err: any) {
+        console.error('[Pipeline] Fallback generateWithRAG failed:', err.message);
+        result.errors.push({ step: 'generate_fallback', error: err.message });
+      }
+      for (const cardData of fallbackCards) {
         const modResult = moderateCard(cardData);
         if (modResult.status !== 'blocked') {
           const card = await publishCard(
@@ -139,8 +145,14 @@ export async function executePipeline(
     if (cleanedPapers.length === 0) {
       console.log('[Pipeline] All papers are duplicates, falling back to direct generation');
       await updateProgress(pipelineJobId, 'generate_fallback', 50);
-      const cards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
-      for (const cardData of cards) {
+      let fallbackCards: any[] = [];
+      try {
+        fallbackCards = await generateWithRAG({ count, domains: pipelineTopics, subtopicMap });
+      } catch (err: any) {
+        console.error('[Pipeline] Fallback generateWithRAG failed:', err.message);
+        result.errors.push({ step: 'generate_fallback', error: err.message });
+      }
+      for (const cardData of fallbackCards) {
         const modResult = moderateCard(cardData);
         if (modResult.status !== 'blocked') {
           const card = await publishCard(
@@ -227,13 +239,19 @@ export async function executePipeline(
     const retrievalQuery = pipelineTopics.join(' ');
     const retrieval: any = await retrieve(retrievalQuery, { topK: 10 });
 
-    const generatedCards: any[] = await generateWithRAG({
-      count,
-      domains: pipelineTopics,
-      subtopicMap,
-      context: retrieval.context,
-      citations: buildCitations(retrieval.sourceChunks),
-    });
+    let generatedCards: any[] = [];
+    try {
+      generatedCards = await generateWithRAG({
+        count,
+        domains: pipelineTopics,
+        subtopicMap,
+        context: retrieval.context,
+        citations: buildCitations(retrieval.sourceChunks),
+      });
+    } catch (err: any) {
+      console.error('[Pipeline] generateWithRAG failed:', err.message);
+      result.errors.push({ step: 'retrieve_generate', error: err.message });
+    }
     result.steps.generate = { status: 'done', cardsGenerated: generatedCards.length };
 
     // === STEP 9: Fact-Check ===
@@ -293,6 +311,9 @@ export async function executePipeline(
     console.log('[Pipeline] Step 12: Invalidating cache...');
     await invalidateFeedCache(pipelineTopics);
 
+    if (result.publishedCards.length === 0) {
+      console.warn('[Pipeline] ⚠️ All cards were duplicates — nothing published');
+    }
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[Pipeline] ✅ Complete! Published ${result.publishedCards.length}/${generatedCards.length} cards in ${duration}s`);
 

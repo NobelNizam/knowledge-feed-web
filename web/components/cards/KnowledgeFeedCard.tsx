@@ -482,7 +482,7 @@ function ReportModal({ cardId, onClose }: { cardId: number; onClose: () => void 
   const handleSubmit = async () => {
     if (selected.length === 0) return;
     try {
-      await interactionAPI.reportCard(cardId, selected.join(', '));
+      await interactionAPI.reportCard(cardId, selected[0], selected.length > 1 ? selected.join(', ') : undefined);
       setSubmitted(true);
     } catch (err) {
       console.error('Report failed:', err);

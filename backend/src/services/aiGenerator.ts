@@ -116,11 +116,20 @@ function extractJSON(text: string): string | null {
     .replace(/```\s*/g, '')
     .trim();
 
-  const match = cleaned.match(/\[[\s\S]*\]/);
-  if (match) return match[0];
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start !== -1 && end !== -1 && start < end) {
+    const jsonStr = cleaned.substring(start, end + 1);
+    try {
+      JSON.parse(jsonStr);
+      return jsonStr;
+    } catch {
+      // fall through to salvage
+    }
+  }
 
-  const salvage = cleaned.match(/\[\s*\{[\s\S]*\}/);
-  if (salvage) return salvage[0] + ']';
+  const salvage = cleaned.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+  if (salvage) return salvage[0];
 
   return null;
 }

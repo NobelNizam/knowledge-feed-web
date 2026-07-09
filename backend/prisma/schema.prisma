@@ -180,6 +180,18 @@ enum ReactionType {
   DISLIKE
 }
 
+enum VerificationStatus {
+  verified
+  unverified
+  disputed
+}
+
+enum ReportStatus {
+  pending
+  reviewed
+  resolved
+}
+
 model Reaction {
   id           Int          @id @default(autoincrement())
   userId       Int          @map("user_id")
@@ -296,7 +308,7 @@ model ContentVerification {
   sourceName  String?  @map("source_name")
   sourceUrl   String?  @map("source_url")
   factChecker String?  @map("fact_checker")
-  status      String   @default("unverified") // verified | unverified | disputed
+  status      VerificationStatus @default(unverified)
   checkedAt   DateTime @default(now()) @map("checked_at")
 
   post KnowledgeCard @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -311,7 +323,7 @@ model Report {
   reportedCommentId Int?      @map("reported_comment_id")
   reason            String
   description       String?
-  status            String    @default("pending") // pending | reviewed | resolved
+  status            ReportStatus @default(pending)
   createdAt         DateTime  @default(now()) @map("created_at")
   resolvedAt        DateTime? @map("resolved_at")
   resolvedByUserId  Int?      @map("resolved_by_user_id")

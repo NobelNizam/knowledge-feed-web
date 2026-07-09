@@ -43,7 +43,7 @@ export default function ProfileSettings() {
   useEffect(() => {
     const fetchDomains = async () => {
       try {
-        const res = await knowledgeAPI.getDomains();
+        const res = await knowledgeAPI.getDomains(true);
         if (res.success) {
           const map = new Map<string, number>();
           (res.data as any[]).forEach((d: any) => map.set(d.name, d.id));

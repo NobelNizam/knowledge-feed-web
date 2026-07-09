@@ -1,0 +1,3 @@
+-- Add VerificationStatus and ReportStatus enums
+-- No column changes needed: PostgreSQL TEXT columns remain compatible with Prisma enums
+-- This migration is a no-op for documentation purposes

@@ -161,8 +161,8 @@ export const knowledgeAPI = {
     return response;
   },
 
-  getDomains: async () => {
-    const response = await api.get('/knowledge/domains');
+  getDomains: async (all = false) => {
+    const response = await api.get(`/knowledge/domains${all ? '?all=true' : ''}`);
     return response;
   },
 

@@ -36,10 +36,10 @@ export default function SearchPage() {
       try {
         const res = await knowledgeAPI.getDomains();
         if (res.success) {
-          setAvailableDomains(res.data);
+          setAvailableDomains(res.data.map((d: any) => d.name || d));
         }
       } catch (err) {
-        setAvailableDomains(['science', 'history', 'technology', 'philosophy', 'arts', 'nature']);
+        setAvailableDomains(['Formal Sciences', 'Natural Sciences', 'Engineering & Technology', 'Medical & Health Sciences', 'Social Sciences', 'Humanities & Arts', 'Agricultural & Environmental Sciences', 'Interdisciplinary Sciences']);
       }
     };
     fetchDomains();
