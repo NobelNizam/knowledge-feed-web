@@ -193,8 +193,23 @@ export const userAPI = {
     return response;
   },
 
-  updateProfile: async (displayName: string, avatarUrl?: string) => {
-    const response = await api.put('/user/profile', { displayName, avatarUrl });
+  updateProfile: async (displayName: string, avatarUrl?: string, bio?: string) => {
+    const response = await api.put('/user/profile', { displayName, avatarUrl, bio });
+    return response;
+  },
+
+  toggleFollow: async (userId: number) => {
+    const response = await api.post(`/user/${userId}/follow`);
+    return response;
+  },
+
+  getFollowers: async (userId: number) => {
+    const response = await api.get(`/user/${userId}/followers`);
+    return response;
+  },
+
+  getFollowing: async (userId: number) => {
+    const response = await api.get(`/user/${userId}/following`);
     return response;
   },
 };
@@ -233,7 +248,12 @@ export const interactionAPI = {
   addComment: async (cardId: number, text: string, parentId?: number) => {
     const response = await api.post(`/knowledge/${cardId}/comments`, { text, parentId });
     return response;
-  }
+  },
+
+  repostCard: async (cardId: number) => {
+    const response = await api.post(`/knowledge/${cardId}/repost`);
+    return response;
+  },
 };
 
 export default api;

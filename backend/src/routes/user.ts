@@ -108,7 +108,7 @@ router.post('/save', async (req: Request, res: Response) => {
 router.put('/profile', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { name, displayName: rawDisplayName, avatarUrl } = req.body || {};
+    const { name, displayName: rawDisplayName, avatarUrl, bio } = req.body || {};
     const resolvedDisplayName = rawDisplayName || name;
 
     if (!resolvedDisplayName || !resolvedDisplayName.trim()) {
@@ -128,13 +128,76 @@ router.put('/profile', async (req: Request, res: Response) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { displayName: resolvedDisplayName.trim(), avatarUrl },
+      data: { displayName: resolvedDisplayName.trim(), avatarUrl, bio },
     });
 
     res.json({ success: true, data: updatedUser });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Gagal memperbarui profil' });
+  }
+});
+
+// POST /api/user/:id/follow — toggle follow
+router.post('/:id/follow', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const targetId = Number(req.params.id);
+
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+    if (userId === targetId) return res.status(400).json({ error: 'Cannot follow yourself' });
+
+    const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
+    const existingFollow = await prisma.follow.findUnique({
+      where: { followerId_followingId: { followerId: userId, followingId: targetId } },
+    });
+
+    if (existingFollow) {
+      await prisma.follow.delete({ where: { followerId_followingId: { followerId: userId, followingId: targetId } } });
+      return res.json({ success: true, followed: false });
+    }
+
+    await prisma.follow.create({ data: { followerId: userId, followingId: targetId } });
+    res.json({ success: true, followed: true });
+  } catch (error) {
+    console.error('Follow error:', error);
+    res.status(500).json({ error: 'Failed to toggle follow' });
+  }
+});
+
+// GET /api/user/:id/followers
+router.get('/:id/followers', async (req: Request, res: Response) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+
+    const followers = await prisma.follow.findMany({
+      where: { followingId: targetId },
+      include: { follower: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
+    });
+    res.json({ success: true, data: followers.map(f => f.follower) });
+  } catch (error) {
+    console.error('Followers error:', error);
+    res.status(500).json({ error: 'Failed to fetch followers' });
+  }
+});
+
+// GET /api/user/:id/following
+router.get('/:id/following', async (req: Request, res: Response) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+
+    const following = await prisma.follow.findMany({
+      where: { followerId: targetId },
+      include: { following: { select: { id: true, username: true, displayName: true, avatarUrl: true } } },
+    });
+    res.json({ success: true, data: following.map(f => f.following) });
+  } catch (error) {
+    console.error('Following error:', error);
+    res.status(500).json({ error: 'Failed to fetch following' });
   }
 });
 

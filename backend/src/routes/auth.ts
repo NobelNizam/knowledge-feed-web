@@ -198,6 +198,11 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid login or password' });
     }
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    }).catch(() => {});
+
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
     setTokenCookie(req, res, accessToken, false);
     setTokenCookie(req, res, refreshToken, true);

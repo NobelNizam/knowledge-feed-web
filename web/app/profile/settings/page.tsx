@@ -15,6 +15,7 @@ export default function ProfileSettings() {
   const router = useRouter();
 
   const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('👤');
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [domainMap, setDomainMap] = useState<Map<string, number>>(new Map()); // name → id
@@ -32,6 +33,7 @@ export default function ProfileSettings() {
       router.push('/login');
     } else if (user) {
       setName(user.displayName || '');
+      setBio(user.bio || '');
       setSelectedAvatar(user.avatarUrl || '👤');
       // Load saved domain names from followedDomains
       const savedDomains = (user as any).followedDomains?.map((fd: any) => fd.domain?.name) || [];
@@ -75,7 +77,7 @@ export default function ProfileSettings() {
 
     try {
       // 1. Update nama profil & avatar
-      const profileRes = await userAPI.updateProfile(name.trim(), selectedAvatar);
+      const profileRes = await userAPI.updateProfile(name.trim(), selectedAvatar, bio.trim());
       if (!profileRes.success) {
         throw new Error(profileRes.error || 'Gagal memperbarui profil');
       }
@@ -173,6 +175,20 @@ export default function ProfileSettings() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Bio Textarea */}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="bio-textarea" className="text-xs font-semibold text-muted-foreground">Bio</label>
+              <textarea
+                id="bio-textarea"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[80px] text-foreground resize-none text-sm"
+                placeholder="Ceritakan tentang diri Anda..."
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground">{bio.length}/500</p>
             </div>
 
             {/* Nama Input */}
