@@ -1,153 +1,251 @@
 erDiagram
     User {
-        int user_id PK
+        int id PK
         string username UK
+        string email UK "nullable"
         string password_hash
         string display_name
-        text bio
-        string avatar_url
+        text bio "nullable"
+        string avatar_url "nullable"
+        string role "USER|ADMIN"
+        string reading_level "beginner|intermediate|advanced"
+        boolean email_verified
+        boolean is_active
+        timestamp last_login_at "nullable"
+        timestamp deleted_at "nullable"
         timestamp created_at
+        timestamp updated_at
     }
 
-    Post {
-        int post_id PK
-        text content
-        json source_data
-        boolean is_published
+    Session {
+        string id PK "cuid"
+        int user_id FK
+        string refresh_token UK
+        string device_info "nullable"
+        string ip_address "nullable"
+        timestamp expires_at
+        boolean is_revoked
         timestamp created_at
     }
 
     Domain {
-        int domain_id PK
-        string name
-        int parent_domain_id FK
+        int id PK
+        string name UK
+        string parent_domain_id UK "nullable, hierarchical: 1000-8000 L1, 1010-8330 L2"
+        timestamp created_at
     }
 
     Hashtag {
-        int tag_id PK
+        int id PK
         string name UK
-        int domain_id FK
+        string parent_domain_id "string ref to Domain.parent_domain_id L2"
+        timestamp created_at
     }
 
     PostHashtag {
-        int post_id FK
-        int tag_id FK
+        int post_id PK_FK
+        int tag_id PK_FK
     }
 
     UserFollowDomain {
+        int id PK
         int user_id FK
         int domain_id FK
         timestamp created_at
     }
 
-    Comment {
-        int comment_id PK
-        int post_id FK
-        int user_id FK
+    KnowledgeCard {
+        int id PK
+        string title
         text content
+        string type "QUICK_FACT"
+        int domain_id FK
+        string source_url "nullable"
+        string source_name "nullable"
+        string ai_model "nullable"
+        timestamp generated_at
+        int view_count
+        int save_count
+        int share_count
+        int repost_count
+        float engagement_score
+        boolean is_published
+        boolean fact_checked
+        float fact_check_score "nullable"
+        string moderation_status "pending|approved|rejected"
+        text source_chunk_ids "array"
+        json source_data "nullable"
+        json citations "nullable"
         timestamp created_at
         timestamp updated_at
-        boolean is_deleted
     }
 
     Reaction {
-        int reaction_id PK
+        int id PK
         int user_id FK
         int post_id FK
-        enum reaction_type
+        enum reaction_type "LIKE|DISLIKE"
         timestamp created_at
     }
 
     Repost {
+        int id PK
         int user_id FK
         int post_id FK
         timestamp created_at
     }
 
     Bookmark {
+        int id PK
         int user_id FK
         int post_id FK
         timestamp created_at
     }
 
-    Mention {
-        int comment_id FK
-        int mentioned_user_id FK
-    }
-
     Follow {
+        int id PK
         int follower_id FK
         int following_id FK
         timestamp created_at
     }
 
-    PostView {
-        int view_id PK
+    Mention {
+        int id PK
+        int comment_id FK
+        int mentioned_user_id FK
+    }
+
+    Comment {
+        int id PK
+        int post_id FK
         int user_id FK
+        int parent_id FK "nullable, self-ref"
+        text content
+        boolean is_deleted
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    PostView {
+        int id PK
+        int user_id FK "nullable"
         int post_id FK
         timestamp viewed_at
     }
 
-    Session {
-        string session_id PK
-        int user_id FK
-        string refresh_token
-        timestamp expires_at
-        timestamp created_at
-        string device_info
-        string ip_address
-        boolean is_revoked
-    }
-
     ContentVerification {
-        int verification_id PK
+        int id PK
         int post_id FK
-        string source_name
-        string source_url
-        string fact_checker
-        enum status
+        string source_name "nullable"
+        string source_url "nullable"
+        string fact_checker "nullable"
+        enum status "verified|unverified|disputed"
         timestamp checked_at
     }
 
     Report {
-        int report_id PK
+        int id PK
         int reporter_user_id FK
-        int reported_post_id FK
-        int reported_comment_id FK
+        int reported_post_id FK "nullable"
+        int reported_comment_id FK "nullable"
         string reason
-        text description
-        enum status
+        text description "nullable"
+        enum status "pending|reviewed|resolved"
         timestamp created_at
-        timestamp resolved_at
-        int resolved_by_user_id FK
+        timestamp resolved_at "nullable"
+        int resolved_by_user_id FK "nullable"
     }
 
-    User ||--o{ Comment : "membuat"
-    User ||--o{ Reaction : "memberi"
-    User ||--o{ Repost : "melakukan"
-    User ||--o{ Bookmark : "menyimpan"
-    User ||--o{ Follow : "mengikuti"
-    User ||--o{ Follow : "diikuti"
-    User ||--o{ UserFollowDomain : "mengikuti domain"
-    User ||--o{ PostView : "melihat"
+    KnowledgeSource {
+        int id PK
+        string external_id UK
+        string source_type
+        string title
+        text authors "array"
+        text abstract "nullable"
+        string url "nullable"
+        string pdf_url "nullable"
+        string category "nullable"
+        timestamp published_date "nullable"
+        string content_hash "nullable"
+        text raw_content "nullable"
+        text cleaned_content "nullable"
+        string status
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DocumentChunk {
+        int id PK
+        int source_id FK
+        int chunk_index
+        text content
+        int start_char
+        int end_char
+        int token_count "nullable"
+        boolean embedded
+        timestamp created_at
+    }
+
+    FactCheckResult {
+        string id PK "cuid"
+        int card_id FK
+        string claim
+        boolean verified
+        float confidence
+        string source_type
+        string source_url "nullable"
+        string source_title "nullable"
+        json details "nullable"
+        timestamp created_at
+    }
+
+    PipelineJob {
+        string id PK "cuid"
+        string bullmq_job_id UK "nullable"
+        string type
+        string status
+        json input "nullable"
+        json output "nullable"
+        string error "nullable"
+        string current_step "nullable"
+        int progress
+        timestamp started_at "nullable"
+        timestamp completed_at "nullable"
+        timestamp created_at
+    }
+
     User ||--o{ Session : "memiliki sesi"
+    User ||--o{ UserFollowDomain : "mengikuti domain"
+    User ||--o{ Reaction : "memberi reaksi"
+    User ||--o{ Repost : "melakukan repost"
+    User ||--o{ Bookmark : "menyimpan"
+    User ||--o{ Follow : "mengikuti user"
+    User ||--o{ Follow : "diikuti user"
+    User ||--o{ PostView : "melihat"
+    User ||--o{ Comment : "membuat komentar"
     User ||--o{ Mention : "disebut"
     User ||--o{ Report : "melaporkan"
-    User ||--o{ Report : "menyelesaikan"
+    User ||--o{ Report : "menyelesaikan laporan"
 
-    Post ||--o{ Comment : "dikomentari"
-    Post ||--o{ Reaction : "diberi reaksi"
-    Post ||--o{ Repost : "di-repost"
-    Post ||--o{ Bookmark : "disimpan"
-    Post ||--o{ PostHashtag : "memiliki tagar"
-    Post ||--o{ PostView : "dilihat"
-    Post ||--o{ ContentVerification : "diverifikasi"
-    Post ||--o{ Report : "dilaporkan"
+    KnowledgeCard ||--o{ Reaction : "diberi reaksi"
+    KnowledgeCard ||--o{ Repost : "di-repost"
+    KnowledgeCard ||--o{ Bookmark : "disimpan"
+    KnowledgeCard ||--o{ PostHashtag : "memiliki tagar"
+    KnowledgeCard ||--o{ PostView : "dilihat"
+    KnowledgeCard ||--o{ Comment : "dikomentari"
+    KnowledgeCard ||--o{ Report : "dilaporkan"
+    KnowledgeCard ||--o{ ContentVerification : "diverifikasi"
+    KnowledgeCard ||--o{ FactCheckResult : "di-fact-check"
+    KnowledgeCard }o--|| Domain : "berdomain"
 
-    Domain ||--o{ Domain : "parent"
-    Domain ||--o{ Hashtag : "memiliki tagar"
     Domain ||--o{ UserFollowDomain : "diikuti user"
+    Domain ||--o{ KnowledgeCard : "memiliki kartu"
 
-    Hashtag ||--o{ PostHashtag : "muncul di"
+    Hashtag ||--o{ PostHashtag : "muncul di post"
 
-    Comment ||--o{ Mention : "menyebut"
+    Comment ||--o{ Comment : "memiliki balasan"
+    Comment ||--o{ Mention : "menyebut user"
+    Comment ||--o{ Report : "dilaporkan"
+
+    KnowledgeSource ||--o{ DocumentChunk : "memiliki chunk"
