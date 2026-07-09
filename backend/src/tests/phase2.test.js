@@ -50,7 +50,7 @@ describe('Phase 2.10 — phase2 migration SQL exists', () => {
   const dir = path.join(__dirname, '..', '..', 'prisma', 'migrations');
 
   test('migration folder exists and contains CREATE INDEX for each new index', () => {
-    const folders = fs.readdirSync(dir).filter((f) => f.startsWith('2026070') || f.includes('phase2'));
+    const folders = fs.readdirSync(dir).filter((f) => f.startsWith('2026070') && f.includes('init_v2'));
     expect(folders.length).toBeGreaterThan(0);
     const sql = fs.readFileSync(
       path.join(dir, folders[0], 'migration.sql'),

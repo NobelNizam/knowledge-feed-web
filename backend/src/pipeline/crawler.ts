@@ -151,7 +151,16 @@ export function getDefaultTopics(): string[] {
   if (envTopics) {
     return envTopics.split(',').map((t) => t.trim()).filter(Boolean);
   }
-  return ['machine learning', 'artificial intelligence', 'computer science'];
+  return [
+    'Artificial Intelligence',
+    'Physics',
+    'Biology',
+    'Economics',
+    'Psychology',
+    'Mathematics',
+    'Climate Science',
+    'Data Science',
+  ];
 }
 
 export { parseArxivResponse };

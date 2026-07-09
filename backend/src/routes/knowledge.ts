@@ -46,6 +46,17 @@ router.get('/search', async (req: Request, res: Response) => {
     const { q, domain } = req.query;
     const limit = clampLimit(req.query.limit);
 
+    let userId: string | null = null;
+    const token = req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        userId = (jwt.verify(token, JWT_SECRET) as { userId: string }).userId;
+      } catch {
+        // ignore
+      }
+    }
+    const userIdNum = userId ? parseInt(userId, 10) : undefined;
+
     let domainId: number | undefined;
     if (domain) {
       const domainRow = await prisma.domain.findUnique({
@@ -58,8 +69,13 @@ router.get('/search', async (req: Request, res: Response) => {
     const cards = await prisma.knowledgeCard.findMany({
       where: {
         AND: [
-          q ? { title: { contains: String(q), mode: 'insensitive' } } : {},
-          domain ? { domainId: domainId ?? -1 } : {},
+          q ? {
+            OR: [
+              { title: { contains: String(q), mode: 'insensitive' } },
+              { content: { contains: String(q), mode: 'insensitive' } },
+            ],
+          } : {},
+          domain ? (domainId ? { domainId } : {}) : {},
         ],
       },
       include: { domain: { select: { name: true } } },
@@ -67,9 +83,44 @@ router.get('/search', async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
+    // ponytail: inline enrichment, same shape as feed.ts enrichCardInteractions
+    const cardIds = cards.map(c => c.id);
+    const queries: any[] = [
+      prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: cardIds }, reactionType: 'LIKE' }, _count: { id: true } }),
+      prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: cardIds }, reactionType: 'DISLIKE' }, _count: { id: true } }),
+      prisma.comment.groupBy({ by: ['postId'], where: { postId: { in: cardIds }, isDeleted: false }, _count: { id: true } }),
+    ];
+    if (userIdNum) {
+      queries.push(prisma.reaction.findMany({ where: { userId: userIdNum, postId: { in: cardIds }, reactionType: 'LIKE' } }));
+      queries.push(prisma.reaction.findMany({ where: { userId: userIdNum, postId: { in: cardIds }, reactionType: 'DISLIKE' } }));
+      queries.push(prisma.bookmark.findMany({ where: { userId: userIdNum, postId: { in: cardIds } }, select: { postId: true } }));
+    }
+
+    const results = await Promise.all(queries);
+    const [likeCounts, dislikeCounts, commentCounts] = results;
+    const userLikes = userIdNum ? results[3] : [];
+    const userDislikes = userIdNum ? results[4] : [];
+    const userBookmarks = userIdNum ? results[5] : [];
+
+    const likeMap = new Map(likeCounts.map((l: any) => [l.postId, l._count.id]));
+    const dislikeMap = new Map(dislikeCounts.map((d: any) => [d.postId, d._count.id]));
+    const commentMap = new Map(commentCounts.map((c: any) => [c.postId, c._count.id]));
+    const likedSet = new Set(userLikes.map((ul: any) => ul.postId));
+    const dislikedSet = new Set(userDislikes.map((ud: any) => ud.postId));
+    const savedSet = new Set(userBookmarks.map((b: any) => b.postId));
+
     res.json({
       success: true,
-      data: cards.map((c) => ({ ...c, domain: c.domain?.name ?? c.domain })),
+      data: cards.map((c) => ({
+        ...c,
+        domain: c.domain?.name ?? c.domain ?? '',
+        likeCount: likeMap.get(c.id) || 0,
+        dislikeCount: dislikeMap.get(c.id) || 0,
+        commentsCount: commentMap.get(c.id) || 0,
+        liked: likedSet.has(c.id),
+        disliked: dislikedSet.has(c.id),
+        saved: savedSet.has(c.id),
+      })),
     });
   } catch (error) {
     console.error('Search error:', error);
@@ -103,11 +154,12 @@ router.get('/trending', async (req: Request, res: Response) => {
 });
 
 // GET /api/knowledge/domains
-router.get('/domains', async (_req: Request, res: Response) => {
+router.get('/domains', async (req: Request, res: Response) => {
   try {
+    const all = req.query.all === 'true';
     const domains = await prisma.domain.findMany({
-      where: { parentDomainId: null },
-      select: { id: true, name: true },
+      where: all ? {} : { parentDomainId: null },
+      select: { id: true, name: true, parentDomainId: true },
       orderBy: { id: 'asc' },
     });
 
