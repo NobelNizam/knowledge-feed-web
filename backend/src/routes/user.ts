@@ -32,11 +32,14 @@ router.put('/preferences', async (req: Request, res: Response) => {
 
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        readingLevel,
-        followedDomains: { set: domains.map((id: number) => ({ id })) },
-      },
+      data: { readingLevel },
     });
+    await prisma.userFollowDomain.deleteMany({ where: { userId } });
+    if (domains.length > 0) {
+      await prisma.userFollowDomain.createMany({
+        data: domains.map((id: number) => ({ userId, domainId: id })),
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

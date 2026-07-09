@@ -14,7 +14,7 @@ import { RefreshCw, BookOpen, AlertCircle, Filter, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
   const { activeFilter, toggleFilter } = useFilter();
 
@@ -94,10 +94,11 @@ export default function Home() {
     return (
       <OnboardingView 
         availableDomains={availableDomains} 
-        onComplete={() => {
+        onComplete={async () => {
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('feed_tab_states');
           }
+          await refreshUser();
           setShowOnboarding(false);
         }} 
       />
