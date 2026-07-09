@@ -272,29 +272,35 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { followedDomains: true, bookmarks: { include: { post: true } } },
+      include: {
+        followedDomains: true,
+        bookmarks: { include: { post: true } },
+        reposts: { include: { post: true } },
+        _count: { select: { followers: true, following: true } },
+      },
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { passwordHash, bookmarks: userBookmarks, ...cleanUser } = user;
+    const { passwordHash, bookmarks: userBookmarks, reposts: userReposts, _count, ...cleanUser } = user;
     const bookmarkedPosts = userBookmarks.map((b) => b.post);
+    const repostedPosts = userReposts.map((r) => r.post);
+    const allPostIds = [...new Set([...bookmarkedPosts.map((p) => p.id), ...repostedPosts.map((p) => p.id)])];
 
-    if (bookmarkedPosts.length > 0) {
-      const postIds = bookmarkedPosts.map((c) => c.id);
+    if (allPostIds.length > 0) {
       const [reactions, userReactions, comments] = await Promise.all([
-        prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: postIds }, reactionType: 'LIKE' }, _count: { id: true } }),
-        prisma.reaction.findMany({ where: { userId: user.id, postId: { in: postIds }, reactionType: 'LIKE' } }),
-        prisma.comment.groupBy({ by: ['postId'], where: { postId: { in: postIds } }, _count: { id: true } }),
+        prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: allPostIds }, reactionType: 'LIKE' }, _count: { id: true } }),
+        prisma.reaction.findMany({ where: { userId: user.id, postId: { in: allPostIds }, reactionType: 'LIKE' } }),
+        prisma.comment.groupBy({ by: ['postId'], where: { postId: { in: allPostIds } }, _count: { id: true } }),
       ]);
 
       const likesMap = Object.fromEntries(reactions.map((l) => [l.postId, l._count.id]));
       const likedSet = new Set(userReactions.map((ul) => ul.postId));
       const commentsMap = Object.fromEntries(comments.map((c) => [c.postId, c._count.id]));
 
-      const enriched = bookmarkedPosts.map((row) => ({
+      const enrichedBookmarks = bookmarkedPosts.map((row) => ({
         ...row,
         likeCount: likesMap[row.id] || 0,
         liked: likedSet.has(row.id),
@@ -302,9 +308,37 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
         commentsCount: commentsMap[row.id] || 0,
       }));
 
-      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: enriched } });
+      const enrichedReposts = repostedPosts.map((row) => ({
+        ...row,
+        likeCount: likesMap[row.id] || 0,
+        liked: likedSet.has(row.id),
+        saved: false,
+        commentsCount: commentsMap[row.id] || 0,
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          ...cleanUser,
+          followerCount: _count.followers,
+          followingCount: _count.following,
+          followedDomains: user.followedDomains,
+          bookmarks: enrichedBookmarks,
+          reposts: enrichedReposts,
+        },
+      });
     } else {
-      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: [] } });
+      res.json({
+        success: true,
+        data: {
+          ...cleanUser,
+          followerCount: _count.followers,
+          followingCount: _count.following,
+          followedDomains: user.followedDomains,
+          bookmarks: [],
+          reposts: [],
+        },
+      });
     }
   } catch (error) {
     console.error('Fetch me error:', error);

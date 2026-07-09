@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { KnowledgeFeedCard } from '@/components/cards/KnowledgeFeedCard';
 import { useAuth } from '@/lib/AuthContext';
-import { RefreshCw, Bookmark, User as UserIcon } from 'lucide-react';
+import { RefreshCw, Bookmark, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 export default function Profile() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [showAllTopics, setShowAllTopics] = useState(false);
+  const [activeTab, setActiveTab] = useState<'bookmarks' | 'reposts'>('bookmarks');
   
-  // Protect route
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
@@ -30,32 +31,35 @@ export default function Profile() {
   return (
     <div className="flex flex-col flex-1 w-full max-w-2xl mx-auto border-x border-border min-h-screen bg-background">
       
-      {/* Profile Header section */}
-      <div className="p-6 border-b border-border relative">
+      <div className="p-3 sm:p-6 border-b border-border relative">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center text-4xl border border-border overflow-hidden select-none">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-muted rounded-full flex items-center justify-center text-3xl sm:text-4xl border border-border overflow-hidden select-none shrink-0">
               {user.avatarUrl ? user.avatarUrl : '👤'}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.displayName}</h1>
-              <p className="text-muted-foreground text-sm">{user.email}</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{user.displayName}</h1>
+              <p className="text-muted-foreground text-sm">@{user.username}</p>
               {user.bio && (
                 <p className="text-muted-foreground text-sm mt-1">{user.bio}</p>
               )}
+              <div className="flex items-center gap-3 mt-1">
+                <Link href={`/user/${user.id}/followers`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <span className="font-semibold text-foreground">{user.followerCount ?? 0}</span> Pengikut
+                </Link>
+                <Link href={`/user/${user.id}/following`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <span className="font-semibold text-foreground">{user.followingCount ?? 0}</span> Mengikuti
+                </Link>
+              </div>
             </div>
           </div>
           
-          {/* Tombol gerigi tanpa caption di pojok kanan setelah username (YAGNI/Ponytail) */}
           <Link 
             href="/profile/settings" 
-            className="p-2.5 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-200 border border-border/40 shadow-sm"
+            className="p-2.5 sm:p-2 rounded-full hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-200 border border-border/40 shadow-sm active:scale-95"
             title="Pengaturan Profil"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-settings animate-hover-spin">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
+            <Settings className="w-5 h-5 sm:w-[22px] sm:h-[22px]" />
           </Link>
         </div>
 
@@ -86,34 +90,56 @@ export default function Profile() {
       </div>
 
       <div className="flex-1">
-        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-3 px-4 flex justify-between items-center">
-          <h2 className="font-bold text-foreground flex items-center gap-2">
-            <Bookmark className="w-4 h-4" /> Tersimpan ({user.bookmarks?.length || 0})
-          </h2>
+        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
+          <div className="flex">
+            <button onClick={() => setActiveTab('bookmarks')} className={cn(
+              "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
+              activeTab === 'bookmarks' ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+              <Bookmark className="w-4 h-4 inline mr-1.5" />
+              Bookmark ({user.bookmarks?.length || 0})
+            </button>
+            <button onClick={() => setActiveTab('reposts')} className={cn(
+              "flex-1 py-3 text-sm font-medium transition-colors border-b-2",
+              activeTab === 'reposts' ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+              <RefreshCw className="w-4 h-4 inline mr-1.5" />
+              Repost ({user.reposts?.length || 0})
+            </button>
+          </div>
         </div>
 
-        {user.bookmarks && user.bookmarks.length > 0 ? (
-          <div className="flex flex-col w-full pb-8">
-            {user.bookmarks.map((card, idx: number) => (
-              <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16 px-4">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-              <Bookmark className="w-8 h-8 text-muted-foreground" />
+        {(() => {
+          const tabCards = activeTab === 'bookmarks' ? (user.bookmarks || []) : (user.reposts || []);
+
+          if (tabCards.length > 0) {
+            return (
+              <div className="flex flex-col w-full pb-8">
+                {tabCards.map((card, idx: number) => (
+                  <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
+                ))}
+              </div>
+            );
+          }
+
+          return (
+            <div className="text-center py-16 px-4">
+              <h3 className="text-xl font-bold text-foreground mb-2">
+                {activeTab === 'bookmarks' ? 'Belum ada konten tersimpan' : 'Belum ada repost'}
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                {activeTab === 'bookmarks' 
+                  ? 'Simpan postingan menarik dengan mengklik tombol bookmark pada feed.'
+                  : 'Repost konten yang Anda suka agar muncul di profil.'}
+              </p>
+              <Link href="/" className="px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all">
+                Jelajahi Feed
+              </Link>
             </div>
-            <h3 className="text-xl font-bold text-foreground mb-2">Belum ada konten tersimpan</h3>
-            <p className="text-muted-foreground mb-6">
-              Simpan postingan menarik dengan mengklik tombol bookmark pada feed.
-            </p>
-            <Link href="/" className="px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-medium shadow-sm hover:bg-primary/90 transition-all">
-              Jelajahi Feed
-            </Link>
-          </div>
-        )}
+          );
+        })()}
       </div>
-      {/* Pop-up Modal Detail Topik Disukai (YAGNI/Ponytail Glassmorphism) */}
+
       {showAllTopics && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md animate-in fade-in duration-200">
           <div 

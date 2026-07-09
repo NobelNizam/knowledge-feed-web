@@ -41,10 +41,13 @@ Alur: Browser → Next.js → serve HTML shell → React hydrate → fetch API (
 | `web/app/login/page.tsx` | Login | Email + password form, redirect to feed after success |
 | `web/app/register/page.tsx` | Register | Name + email + password form, auto-login after success |
 | `web/app/card/[id]/page.tsx` | CardDetail | Single card — full content, citations, comments section, interaction buttons |
-| `web/app/profile/page.tsx` | Profile | User info, saved cards, liked topics |
-| `web/app/profile/settings/page.tsx` | Settings | Edit profile name, avatar, preferences |
+| `web/app/profile/page.tsx` | Profile | User info, tabs (Bookmark/Repost), follower/following counts (clickable), email hidden (shows @username), mobile-optimized layout |
+| `web/app/profile/settings/page.tsx` | Settings | Edit profile name, avatar, bio, preferences |
 | `web/app/admin/page.tsx` | AdminDashboard | Reports inbox, delete feed, user stats, pipeline toggle |
 | `web/app/search/page.tsx` | Search | Keyword search with domain filter |
+| `web/app/user/[id]/page.tsx` | UserProfile | Public user profile |
+| `web/app/user/[id]/followers/page.tsx` | FollowersList | List of user's followers |
+| `web/app/user/[id]/following/page.tsx` | FollowingList | List of who user follows |
 
 ---
 

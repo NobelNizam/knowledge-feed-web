@@ -15,6 +15,9 @@ export interface User {
   role: 'USER' | 'ADMIN';
   followedDomains?: any[];
   bookmarks?: CardData[];
+  reposts?: CardData[];
+  followerCount?: number;
+  followingCount?: number;
   avatarUrl?: string;
 }
 

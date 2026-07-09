@@ -44,8 +44,8 @@
 | Feed | frontend | Production | Infinite scroll, pull-to-refresh, filter tabs, onboarding |
 | Knowledge | backend | Production | Search (ILIKE), trending, like/view/share/dislike/report/comment |
 | Knowledge | frontend | Production | Card detail, comments, interactions |
-| User | backend | Production | Preferences CRUD, save/unsave, profile update |
-| User | frontend | Production | Profile, settings, saved cards |
+| User | backend | Production | Profile CRUD (bio), save/unsave, follow toggle, followers/following list, public profile, mention parsing (@username auto-creates Mention records) |
+| User | frontend | Production | Profile tabs (Bookmark/Repost), follower/following counts (clickable), repost toggle button, email hidden (shows @username), mobile-optimized, pages: /user/[id], /user/[id]/followers, /user/[id]/following |
 | Admin | backend | Beta | User stats OK; pipeline/status + config/fact-check = placeholder (return success without implementation) |
 | Admin | frontend | Production | Admin guard, reports inbox, delete feed |
 | Pipeline | backend | Production | Full RAG: arXiv → embed → LLM → fact-check → moderate → publish |

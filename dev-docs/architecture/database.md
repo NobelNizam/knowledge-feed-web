@@ -27,7 +27,7 @@
 
 | Model | Table | Purpose | Key Fields |
 |-------|-------|---------|------------|
-| User | `users` | Registered users | username (unique), email? (unique), passwordHash, displayName, bio, avatarUrl, role (USER/ADMIN), readingLevel |
+| User | `users` | Registered users | username (unique), email? (unique), passwordHash, displayName, bio, avatarUrl, role (USER/ADMIN), readingLevel, emailVerified (Boolean, default false), isActive (Boolean, default true), lastLoginAt (DateTime?), deletedAt (DateTime?) |
 | Session | `sessions` | Refresh token persistence | refreshToken (SHA-256 hash, unique), userId, deviceInfo, ipAddress, isRevoked, expiresAt |
 | Domain | `domains` | Knowledge domains | name (unique), parentDomainId (self-referential hierarchy) |
 | Hashtag | `hashtags` | Normalized hashtags | name (unique), domainId (FK → domains) |
@@ -55,6 +55,14 @@
 - `savedCards` implicit relation → explicit `Bookmark` model
 
 ---
+
+## Relation Implementation Status
+
+| Relation | Model | Impl | Notes |
+|----------|-------|------|-------|
+| User 1:N Follow | `Follow` | Yes | Toggle endpoint + follower/following list (public) |
+| User 1:N Repost | `Repost` | Yes | Toggle endpoint + UI button on card |
+| Comment:Mention | `Mention` | Yes | Auto-parsed from comment text via @username pattern |
 
 ## Key Indexes (v2)
 
