@@ -158,12 +158,13 @@ router.get('/domains', async (req: Request, res: Response) => {
   try {
     const all = req.query.all === 'true';
     const domains = await prisma.domain.findMany({
-      where: all ? {} : { parentDomainId: null },
+      where: all ? {} : { NOT: { parentDomainId: null } },
       select: { id: true, name: true, parentDomainId: true },
       orderBy: { id: 'asc' },
     });
-
-    res.json({ success: true, data: domains });
+    const LEVEL1_IDS = new Set(['1000','2000','3000','4000','5000','6000','7000','8000']);
+    const filtered = all ? domains : domains.filter(d => d.parentDomainId && LEVEL1_IDS.has(d.parentDomainId));
+    res.json({ success: true, data: filtered });
   } catch (error) {
     console.error('Domains error:', error);
     res.status(500).json({ error: 'Failed to fetch domains' });

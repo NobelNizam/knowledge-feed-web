@@ -74,12 +74,9 @@ model Session {
 model Domain {
   id             Int      @id @default(autoincrement())
   name           String   @unique
-  parentDomainId Int?     @map("parent_domain_id")
+  parentDomainId String?  @unique @map("parent_domain_id")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  parent     Domain?            @relation("DomainHierarchy", fields: [parentDomainId], references: [id])
-  children   Domain[]           @relation("DomainHierarchy")
-  hashtags   Hashtag[]
   followedBy UserFollowDomain[]
   posts      KnowledgeCard[]
 
@@ -87,13 +84,12 @@ model Domain {
 }
 
 model Hashtag {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  domainId  Int      @map("domain_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  parentDomainId String   @map("parent_domain_id")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  domain Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  posts  PostHashtag[]
+  posts PostHashtag[]
 
   @@map("hashtags")
 }

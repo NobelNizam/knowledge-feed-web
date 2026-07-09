@@ -269,7 +269,7 @@ export async function generateKnowledgeCards(count = 5, domains: string[] | null
               tag: {
                 connectOrCreate: {
                   where: { name: tagName },
-                  create: { name: tagName, domainId: resolvedDomain.id },
+                  create: { name: tagName, parentDomainId: resolvedDomain.parentDomainId || '' },
                 },
               },
             })),

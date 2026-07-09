@@ -11,7 +11,6 @@ interface Level1Seed {
   level2: Level2Entry[];
 }
 
-// Source: DomainKnowledge.md + domainMapping.ts — English canonical naming
 const SEED_DATA: Level1Seed[] = [
   {
     name: "Formal Sciences",
@@ -200,62 +199,69 @@ function parseLevel2(entry: Level2Entry): { name: string; hashtags: string[] } {
 }
 
 async function main() {
-  console.log("Seeding domains & hashtags from DomainKnowledge.md + domainMapping.ts...");
+  console.log("Seeding domains & hashtags...");
 
-  // 1. Delete all existing hashtags and domains not in the canonical list
-  const canonicalNames = new Set<string>();
+  const canonicalDomainNames = new Set<string>();
+  const canonicalHashtagNames = new Set<string>();
+
   for (const l1 of SEED_DATA) {
-    canonicalNames.add(l1.name);
+    canonicalDomainNames.add(l1.name);
     for (const entry of l1.level2) {
-      const { name } = parseLevel2(entry);
-      canonicalNames.add(name);
+      const { name, hashtags } = parseLevel2(entry);
+      canonicalDomainNames.add(name);
+      for (const tag of hashtags) {
+        canonicalHashtagNames.add(tag);
+      }
     }
   }
-  const canonicalArr = [...canonicalNames];
-  console.log(`Canonical domain count: ${canonicalArr.length}`);
 
-  // Delete non-canonical hashtags
-  const staleTags = await prisma.hashtag.findMany({
-    where: { name: { notIn: canonicalArr } },
-    select: { name: true },
-  });
-  if (staleTags.length > 0) {
-    await prisma.hashtag.deleteMany({ where: { name: { notIn: canonicalArr } } });
-    console.log(`Deleted ${staleTags.length} stale hashtags`);
-  }
-
-  // Delete non-canonical domains
+  // Delete stale domains
+  const domainArr = [...canonicalDomainNames];
   const staleDomains = await prisma.domain.findMany({
-    where: { name: { notIn: canonicalArr } },
+    where: { name: { notIn: domainArr } },
     select: { name: true },
   });
   if (staleDomains.length > 0) {
-    console.log(`Deleting stale domains: ${staleDomains.map(d => d.name).join(', ')}`);
-    await prisma.domain.deleteMany({ where: { name: { notIn: canonicalArr } } });
+    console.log(`Deleting stale domains: ${staleDomains.map(d => d.name).join(", ")}`);
+    await prisma.domain.deleteMany({ where: { name: { notIn: domainArr } } });
   }
 
-  // 2. Upsert all canonicals
-  for (const l1 of SEED_DATA) {
-    const domain1 = await prisma.domain.upsert({
+  // Delete stale hashtags
+  const tagArr = [...canonicalHashtagNames];
+  const staleTags = await prisma.hashtag.findMany({
+    where: { name: { notIn: tagArr } },
+    select: { name: true },
+  });
+  if (staleTags.length > 0) {
+    console.log(`Deleting stale hashtags: ${staleTags.map(t => t.name).join(", ")}`);
+    await prisma.hashtag.deleteMany({ where: { name: { notIn: tagArr } } });
+  }
+
+  // Upsert domains & hashtags with computed parentDomainId strings
+  for (const [l1Index, l1] of SEED_DATA.entries()) {
+    const l1ParentDomainId = String((l1Index + 1) * 1000);
+
+    await prisma.domain.upsert({
       where: { name: l1.name },
-      update: {},
-      create: { name: l1.name },
+      update: { parentDomainId: l1ParentDomainId },
+      create: { name: l1.name, parentDomainId: l1ParentDomainId },
     });
 
-    for (const entry of l1.level2) {
+    for (const [l2Index, entry] of l1.level2.entries()) {
       const { name: l2Name, hashtags } = parseLevel2(entry);
+      const l2ParentDomainId = String((l1Index + 1) * 1000 + (l2Index + 1) * 10);
 
-      const domain2 = await prisma.domain.upsert({
+      await prisma.domain.upsert({
         where: { name: l2Name },
-        update: { parentDomainId: domain1.id },
-        create: { name: l2Name, parentDomainId: domain1.id },
+        update: { parentDomainId: l2ParentDomainId },
+        create: { name: l2Name, parentDomainId: l2ParentDomainId },
       });
 
       for (const tag of hashtags) {
         await prisma.hashtag.upsert({
           where: { name: tag },
-          update: { domainId: domain2.id },
-          create: { name: tag, domainId: domain2.id },
+          update: { parentDomainId: l2ParentDomainId },
+          create: { name: tag, parentDomainId: l2ParentDomainId },
         });
       }
     }
