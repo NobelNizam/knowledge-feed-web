@@ -38,7 +38,7 @@ export default function Profile() {
               {user.avatarUrl ? user.avatarUrl : '👤'}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.displayName}</h1>
               <p className="text-muted-foreground text-sm">{user.email}</p>
             </div>
           </div>
@@ -59,19 +59,19 @@ export default function Profile() {
         <div className="mt-6 pt-6 border-t border-border">
           <p className="text-sm font-medium text-muted-foreground mb-2">Topik Disukai</p>
           <div className="flex flex-wrap gap-2 items-center">
-            {user.preferences?.domains && user.preferences.domains.length > 0 ? (
+            {user.followedDomains && user.followedDomains.length > 0 ? (
               <>
-                {user.preferences.domains.slice(0, 5).map((domain: string) => (
-                  <span key={domain} className="capitalize text-xs px-2 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
-                    {domain}
+                {user.followedDomains.slice(0, 5).map((fd: any) => (
+                  <span key={fd.domain?.id || fd.domain?.name} className="capitalize text-xs px-2 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
+                    {fd.domain?.name}
                   </span>
                 ))}
-                {user.preferences.domains.length > 5 && (
+                {user.followedDomains.length > 5 && (
                   <button
                     onClick={() => setShowAllTopics(true)}
                     className="text-xs px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-md font-bold transition-all duration-200"
                   >
-                    + {user.preferences.domains.length - 5} Lainnya
+                    + {user.followedDomains.length - 5} Lainnya
                   </button>
                 )}
               </>
@@ -85,13 +85,13 @@ export default function Profile() {
       <div className="flex-1">
         <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-3 px-4 flex justify-between items-center">
           <h2 className="font-bold text-foreground flex items-center gap-2">
-            <Bookmark className="w-4 h-4" /> Tersimpan ({user.savedCards?.length || 0})
+            <Bookmark className="w-4 h-4" /> Tersimpan ({user.bookmarks?.length || 0})
           </h2>
         </div>
 
-        {user.savedCards && user.savedCards.length > 0 ? (
+        {user.bookmarks && user.bookmarks.length > 0 ? (
           <div className="flex flex-col w-full pb-8">
-            {user.savedCards.map((card, idx: number) => (
+            {user.bookmarks.map((card, idx: number) => (
               <KnowledgeFeedCard key={`${card.id}-${idx}`} card={card} />
             ))}
           </div>
@@ -130,9 +130,9 @@ export default function Profile() {
             <p className="text-xs text-muted-foreground">Berikut adalah daftar lengkap topik rumpun ilmu dan disiplin akademik yang Anda ikuti:</p>
             
             <div className="flex flex-wrap gap-2 max-h-52 overflow-y-auto p-1 scrollbar-thin">
-              {user.preferences?.domains?.map((domain: string) => (
-                <span key={domain} className="capitalize text-xs px-2.5 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
-                  {domain}
+              {user.followedDomains?.map((fd: any) => (
+                <span key={fd.domain?.id || fd.domain?.name} className="capitalize text-xs px-2.5 py-1.5 bg-primary/10 text-primary rounded-md font-semibold select-none">
+                  {fd.domain?.name}
                 </span>
               ))}
             </div>

@@ -85,11 +85,11 @@ const api = {
 };
 
 export const authAPI = {
-  register: async (data: { name: string; email: string; password: string }) => {
+  register: async (data: { displayName: string; username: string; email?: string; password: string }) => {
     const response = await api.post('/auth/register', data, { _skipRefresh: true });
     return response;
   },
-  login: async (data: { email: string; password: string }) => {
+  login: async (data: { login: string; password: string }) => {
     const response = await api.post('/auth/login', data, { _skipRefresh: true });
     return response;
   },
@@ -104,7 +104,7 @@ export const authAPI = {
 };
 
 export const feedAPI = {
-  getFeed: async (limit = 20, offset = 0, domains?: string[], seenIds?: string[]) => {
+  getFeed: async (limit = 20, offset = 0, domains?: string[], seenIds?: number[]) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (domains && domains.length > 0) {
       params.append('domains', domains.join(','));
@@ -116,7 +116,7 @@ export const feedAPI = {
     return response;
   },
 
-  getPersonalizedFeed: async (domains: string[], limit = 20, offset = 0, seenIds?: string[]) => {
+  getPersonalizedFeed: async (domains: string[], limit = 20, offset = 0, seenIds?: number[]) => {
     const response = await api.post('/feed/personalized', { domains, seenIds }, { params: { limit, offset } });
     return response;
   },
@@ -126,7 +126,7 @@ export const feedAPI = {
     return response;
   },
 
-  getRefreshSSEUrl: (filterType?: string, filterValue?: string, seenIds?: string[]) => {
+  getRefreshSSEUrl: (filterType?: string, filterValue?: string, seenIds?: number[]) => {
     const params = new URLSearchParams();
     if (filterType) params.append('filterType', filterType);
     if (filterValue) params.append('filterValue', filterValue);
@@ -144,7 +144,7 @@ export const feedAPI = {
 };
 
 export const knowledgeAPI = {
-  getCard: async (id: string) => {
+  getCard: async (id: number) => {
     const response = await api.get(`/knowledge/${id}`);
     return response;
   },
@@ -178,59 +178,59 @@ export const userAPI = {
     return response;
   },
 
-  getProfile: async (userId: string) => {
+  getProfile: async (userId: number) => {
     const response = await api.get(`/user/${userId}`);
     return response;
   },
 
-  updatePreferences: async (domains: string[], readingLevel = 'intermediate') => {
+  updatePreferences: async (domains: number[], readingLevel = 'intermediate') => {
     const response = await api.put(`/user/preferences`, { domains, readingLevel });
     return response;
   },
 
-  saveCard: async (cardId: string) => {
+  saveCard: async (cardId: number) => {
     const response = await api.post(`/user/save`, { cardId });
     return response;
   },
 
-  updateProfile: async (name: string, avatarUrl?: string) => {
-    const response = await api.put('/user/profile', { name, avatarUrl });
+  updateProfile: async (displayName: string, avatarUrl?: string) => {
+    const response = await api.put('/user/profile', { displayName, avatarUrl });
     return response;
   },
 };
 
 export const interactionAPI = {
-  likeCard: async (cardId: string) => {
+  likeCard: async (cardId: number) => {
     const response = await api.post(`/knowledge/${cardId}/like`);
     return response;
   },
 
-  dislikeCard: async (cardId: string) => {
+  dislikeCard: async (cardId: number) => {
     const response = await api.post(`/knowledge/${cardId}/dislike`);
     return response;
   },
 
-  reportCard: async (cardId: string, reasons: string[]) => {
-    const response = await api.post(`/knowledge/${cardId}/report`, { reasons });
+  reportCard: async (cardId: number, reason: string, description?: string) => {
+    const response = await api.post(`/knowledge/${cardId}/report`, { reason, description });
     return response;
   },
 
-  viewCard: async (cardId: string) => {
+  viewCard: async (cardId: number) => {
     const response = await api.post(`/knowledge/${cardId}/view`);
     return response;
   },
 
-  shareCard: async (cardId: string) => {
+  shareCard: async (cardId: number) => {
     const response = await api.post(`/knowledge/${cardId}/share`);
     return response;
   },
 
-  getComments: async (cardId: string) => {
+  getComments: async (cardId: number) => {
     const response = await api.get(`/knowledge/${cardId}/comments`);
     return response;
   },
 
-  addComment: async (cardId: string, text: string, parentId?: string) => {
+  addComment: async (cardId: number, text: string, parentId?: number) => {
     const response = await api.post(`/knowledge/${cardId}/comments`, { text, parentId });
     return response;
   }

@@ -19,24 +19,25 @@ export default function CardDetail({ params }: { params: { id: string } }) {
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
+  const cardId = Number(params.id);
 
   useEffect(() => {
     const fetchCardAndData = async () => {
       try {
-        const res = await knowledgeAPI.getCard(params.id);
+        const res = await knowledgeAPI.getCard(cardId);
         if (res.success) {
           setCard(res.data);
           
           // Rekam view
-          const viewRes = await interactionAPI.viewCard(params.id);
+          const viewRes = await interactionAPI.viewCard(cardId);
           if (viewRes.success && viewRes.viewCount !== undefined) {
             setCard(prev => prev ? { ...prev, viewCount: viewRes.viewCount } : null);
             
             // Sync dengan feed utama dan cache
             window.dispatchEvent(new CustomEvent('card-interaction', {
-              detail: { cardId: params.id, viewCount: viewRes.viewCount }
+              detail: { cardId, viewCount: viewRes.viewCount }
             }));
-            updateCardInCache(params.id, { viewCount: viewRes.viewCount });
+            updateCardInCache(cardId, { viewCount: viewRes.viewCount });
           }
         } else {
           setError(res.error || 'Failed to load card');
@@ -51,7 +52,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
     
     const fetchComments = async () => {
       try {
-        const res = await interactionAPI.getComments(params.id);
+        const res = await interactionAPI.getComments(cardId);
         if (res.success) {
           setComments(res.data || []);
         }
@@ -62,7 +63,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
     fetchCardAndData();
     fetchComments();
-  }, [params.id]);
+  }, [cardId]);
 
   const handleSubmitComment = async () => {
     if (!user) {
@@ -75,7 +76,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
     setSubmitting(true);
     try {
       const res = await interactionAPI.addComment(
-        params.id, 
+        cardId, 
         newCommentText, 
         replyingTo ? replyingTo.id : undefined
       );
@@ -85,7 +86,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
         setReplyingTo(null);
         
         // Refresh comments list
-        const refreshed = await interactionAPI.getComments(params.id);
+        const refreshed = await interactionAPI.getComments(cardId);
         const newCommentsCount = refreshed.data ? refreshed.data.length : 0;
         
         if (refreshed.success) {
@@ -103,9 +104,9 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
         // Sync dengan feed utama dan cache
         window.dispatchEvent(new CustomEvent('card-interaction', {
-          detail: { cardId: params.id, commentsCount: newCommentsCount }
+          detail: { cardId, commentsCount: newCommentsCount }
         }));
-        updateCardInCache(params.id, { commentsCount: newCommentsCount });
+        updateCardInCache(cardId, { commentsCount: newCommentsCount });
       }
     } catch (err) {
       console.error('Failed to submit comment:', err);
@@ -141,11 +142,11 @@ export default function CardDetail({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex flex-col flex-1 w-full max-w-2xl mx-auto border-x border-border min-h-screen bg-background">
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border p-4 flex items-center">
-        <button onClick={() => router.back()} className="mr-4 p-2 rounded-full hover:bg-muted transition-colors">
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-3 py-2.5 sm:px-4 sm:py-3 flex items-center">
+        <button onClick={() => router.back()} className="mr-3 p-1.5 rounded-full hover:bg-muted transition-colors -ml-1">
           <ArrowLeft className="w-5 h-5 text-foreground" />
         </button>
-        <h1 className="text-xl font-bold">Postingan</h1>
+        <h1 className="text-lg font-bold">Postingan</h1>
       </div>
 
       <div className="pb-8">
@@ -164,7 +165,7 @@ export default function CardDetail({ params }: { params: { id: string } }) {
             <div className="flex-1">
               {replyingTo && (
                 <div className="mb-2 p-2 bg-muted rounded-lg flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Membalas <strong>@{replyingTo.user?.name || 'User'}</strong>: &ldquo;{replyingTo.content.substring(0, 30)}&rdquo;</span>
+                  <span>Membalas <strong>@{replyingTo.user?.displayName || 'User'}</strong>: &ldquo;{replyingTo.content.substring(0, 30)}&rdquo;</span>
                   <button onClick={() => setReplyingTo(null)} className="text-destructive font-bold ml-2">Batal</button>
                 </div>
               )}
@@ -198,12 +199,12 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                   {/* Komentar Utama */}
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm shrink-0 font-bold">
-                      {(comment.user?.name || 'U').substring(0, 1).toUpperCase()}
+                      {(comment.user?.displayName || 'U').substring(0, 1).toUpperCase()}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-sm text-foreground">
-                          {comment.user?.name || 'Pengguna'}
+                          {comment.user?.displayName || 'Pengguna'}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {new Date(comment.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
@@ -237,12 +238,12 @@ export default function CardDetail({ params }: { params: { id: string } }) {
                       {comment.replies.map((reply: CommentData) => (
                         <div key={reply.id} className="flex items-start gap-2.5">
                           <div className="w-6 h-6 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-xs shrink-0 font-bold">
-                            {(reply.user?.name || 'U').substring(0, 1).toUpperCase()}
+                            {(reply.user?.displayName || 'U').substring(0, 1).toUpperCase()}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-xs text-foreground">
-                                {reply.user?.name || 'Pengguna'}
+                                {reply.user?.displayName || 'Pengguna'}
                               </span>
                               <span className="text-[10px] text-muted-foreground">
                                 {new Date(reply.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}

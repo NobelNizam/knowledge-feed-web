@@ -1,6 +1,6 @@
 import type { CardUpdate } from './types';
 
-export function updateCardInCache(cardId: string, updates: CardUpdate): void {
+export function updateCardInCache(cardId: number, updates: CardUpdate): void {
   if (typeof window === 'undefined') return;
   const savedStates = sessionStorage.getItem('feed_tab_states');
   if (!savedStates) return;

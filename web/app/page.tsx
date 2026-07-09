@@ -20,7 +20,7 @@ export default function Home() {
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const [availableDomains, setAvailableDomains] = useState<{id: number, name: string}[]>([]);
 
   const currentDomainKey = activeFilter.type === 'all' 
     ? '__all__' 
@@ -50,12 +50,13 @@ export default function Home() {
     currentDomainKey
   });
 
-  // Verify authentication and onboarding needs
+  // Verify authentication and onboarding needs — runs once only
   useEffect(() => {
+    if (isInitialized) return;
     if (!authLoading && !user) {
       router.push('/login');
     } else if (user) {
-      if (!user.preferences?.domains || user.preferences.domains.length === 0) {
+      if (!user.followedDomains || user.followedDomains.length === 0) {
         setShowOnboarding(true);
         fetchAvailableDomains();
         setIsInitialized(true);
@@ -66,7 +67,7 @@ export default function Home() {
         });
       }
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, isInitialized]);
 
   const fetchAvailableDomains = async () => {
     try {
@@ -78,7 +79,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to fetch domains");
     }
-    setAvailableDomains(DOMAIN_LEVEL1_LIST.map((d) => d.name));
+    setAvailableDomains([{id: 0, name: 'Science'}, {id: 0, name: 'History'}, {id: 0, name: 'Technology'}, {id: 0, name: 'Philosophy'}, {id: 0, name: 'Arts'}, {id: 0, name: 'Nature'}]);
   };
 
   if (authLoading) {

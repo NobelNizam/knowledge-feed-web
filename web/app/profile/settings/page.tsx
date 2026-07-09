@@ -17,6 +17,7 @@ export default function ProfileSettings() {
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('👤');
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
+  const [domainMap, setDomainMap] = useState<Map<string, number>>(new Map()); // name → id
 
   // Accordion state (YAGNI/Ponytail)
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
@@ -30,11 +31,28 @@ export default function ProfileSettings() {
     if (!authLoading && !user) {
       router.push('/login');
     } else if (user) {
-      setName(user.name || '');
+      setName(user.displayName || '');
       setSelectedAvatar(user.avatarUrl || '👤');
-      setSelectedDomains(user.preferences?.domains || []);
+      // Load saved domain names from followedDomains
+      const savedDomains = (user as any).followedDomains?.map((fd: any) => fd.domain?.name) || [];
+      setSelectedDomains(savedDomains);
     }
   }, [user, authLoading, router]);
+
+  // Fetch domain id→name mapping from API
+  useEffect(() => {
+    const fetchDomains = async () => {
+      try {
+        const res = await knowledgeAPI.getDomains();
+        if (res.success) {
+          const map = new Map<string, number>();
+          (res.data as any[]).forEach((d: any) => map.set(d.name, d.id));
+          setDomainMap(map);
+        }
+      } catch { /* use local mapping as fallback */ }
+    };
+    fetchDomains();
+  }, []);
 
   const toggleDomain = (domain: string) => {
     setSelectedDomains(prev =>
@@ -63,7 +81,8 @@ export default function ProfileSettings() {
       }
 
       // 2. Update preferensi domain (onboarding/minat)
-      const prefRes = await userAPI.updatePreferences(selectedDomains, user?.preferences?.readingLevel || 'intermediate');
+      const domainIds = selectedDomains.map((name) => domainMap.get(name)).filter((id): id is number => id !== undefined);
+      const prefRes = await userAPI.updatePreferences(domainIds, user?.readingLevel || 'intermediate');
       if (!prefRes.success) {
         throw new Error(prefRes.error || 'Gagal memperbarui preferensi');
       }

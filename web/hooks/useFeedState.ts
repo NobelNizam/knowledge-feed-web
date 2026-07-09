@@ -9,7 +9,7 @@ import type { ActiveFilter } from '@/lib/FilterContext';
 
 export interface TabFeedState {
   cards: CardData[];
-  seenIds: string[];
+  seenIds: number[];
   offset: number;
   hasMore: boolean;
   scrollPosition: number;
@@ -225,7 +225,7 @@ export function useFeedState({ user, isInitialized, activeFilter, currentDomainK
   // Reset feed cache if user preferences change
   useEffect(() => {
     if (user && isInitialized && !isRestoring) {
-      const currentPreferencesString = JSON.stringify(user?.preferences?.domains || []);
+      const currentPreferencesString = JSON.stringify(user?.followedDomains || []);
       if (prevPreferencesRef.current && prevPreferencesRef.current !== currentPreferencesString) {
         console.log("[useFeedState] Preferences changed, resetting feed cache");
         if (typeof window !== 'undefined') {

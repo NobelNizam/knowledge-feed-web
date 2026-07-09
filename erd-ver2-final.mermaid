@@ -1,0 +1,153 @@
+erDiagram
+    User {
+        int user_id PK
+        string username UK
+        string password_hash
+        string display_name
+        text bio
+        string avatar_url
+        timestamp created_at
+    }
+
+    Post {
+        int post_id PK
+        text content
+        json source_data
+        boolean is_published
+        timestamp created_at
+    }
+
+    Domain {
+        int domain_id PK
+        string name
+        int parent_domain_id FK
+    }
+
+    Hashtag {
+        int tag_id PK
+        string name UK
+        int domain_id FK
+    }
+
+    PostHashtag {
+        int post_id FK
+        int tag_id FK
+    }
+
+    UserFollowDomain {
+        int user_id FK
+        int domain_id FK
+        timestamp created_at
+    }
+
+    Comment {
+        int comment_id PK
+        int post_id FK
+        int user_id FK
+        text content
+        timestamp created_at
+        timestamp updated_at
+        boolean is_deleted
+    }
+
+    Reaction {
+        int reaction_id PK
+        int user_id FK
+        int post_id FK
+        enum reaction_type
+        timestamp created_at
+    }
+
+    Repost {
+        int user_id FK
+        int post_id FK
+        timestamp created_at
+    }
+
+    Bookmark {
+        int user_id FK
+        int post_id FK
+        timestamp created_at
+    }
+
+    Mention {
+        int comment_id FK
+        int mentioned_user_id FK
+    }
+
+    Follow {
+        int follower_id FK
+        int following_id FK
+        timestamp created_at
+    }
+
+    PostView {
+        int view_id PK
+        int user_id FK
+        int post_id FK
+        timestamp viewed_at
+    }
+
+    Session {
+        string session_id PK
+        int user_id FK
+        string refresh_token
+        timestamp expires_at
+        timestamp created_at
+        string device_info
+        string ip_address
+        boolean is_revoked
+    }
+
+    ContentVerification {
+        int verification_id PK
+        int post_id FK
+        string source_name
+        string source_url
+        string fact_checker
+        enum status
+        timestamp checked_at
+    }
+
+    Report {
+        int report_id PK
+        int reporter_user_id FK
+        int reported_post_id FK
+        int reported_comment_id FK
+        string reason
+        text description
+        enum status
+        timestamp created_at
+        timestamp resolved_at
+        int resolved_by_user_id FK
+    }
+
+    User ||--o{ Comment : "membuat"
+    User ||--o{ Reaction : "memberi"
+    User ||--o{ Repost : "melakukan"
+    User ||--o{ Bookmark : "menyimpan"
+    User ||--o{ Follow : "mengikuti"
+    User ||--o{ Follow : "diikuti"
+    User ||--o{ UserFollowDomain : "mengikuti domain"
+    User ||--o{ PostView : "melihat"
+    User ||--o{ Session : "memiliki sesi"
+    User ||--o{ Mention : "disebut"
+    User ||--o{ Report : "melaporkan"
+    User ||--o{ Report : "menyelesaikan"
+
+    Post ||--o{ Comment : "dikomentari"
+    Post ||--o{ Reaction : "diberi reaksi"
+    Post ||--o{ Repost : "di-repost"
+    Post ||--o{ Bookmark : "disimpan"
+    Post ||--o{ PostHashtag : "memiliki tagar"
+    Post ||--o{ PostView : "dilihat"
+    Post ||--o{ ContentVerification : "diverifikasi"
+    Post ||--o{ Report : "dilaporkan"
+
+    Domain ||--o{ Domain : "parent"
+    Domain ||--o{ Hashtag : "memiliki tagar"
+    Domain ||--o{ UserFollowDomain : "diikuti user"
+
+    Hashtag ||--o{ PostHashtag : "muncul di"
+
+    Comment ||--o{ Mention : "menyebut"

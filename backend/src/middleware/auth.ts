@@ -11,7 +11,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction): void =
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role?: 'USER' | 'ADMIN' };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; role?: 'USER' | 'ADMIN' };
     req.user = { userId: decoded.userId, role: decoded.role };
     next();
   } catch {
@@ -19,4 +19,4 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction): void =
   }
 };
 
-export = authMiddleware;
+export default authMiddleware;

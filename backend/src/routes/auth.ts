@@ -16,6 +16,21 @@ const authLimiter = rateLimit({
   message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
 });
 
+// ---- validation helpers ----
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
+const SUSPICIOUS_RE = /(<script|<\/script|--|\bDROP\s+TABLE\b|\bALTER\s+TABLE\b|\bEXEC\s*\()/i;
+
+const sanitize = (s: string): string => s.trim();
+const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+
+function suspicious(s: string): boolean {
+  return SUSPICIOUS_RE.test(s);
+}
+
+// ---- token helpers (unchanged) ----
+
 // ponytail: store SHA-256(refreshToken) in the DB, not the JWT itself.
 const hashRefreshToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
@@ -35,7 +50,7 @@ const setTokenCookie = (req: Request, res: Response, token: string, isRefresh = 
   });
 };
 
-async function generateTokens(userId: string, role: string, req: Request) {
+async function generateTokens(userId: number, role: string, req: Request) {
   const accessToken = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '15m' });
   const uniqueId = crypto.randomBytes(16).toString('hex');
   const refreshToken = jwt.sign({ userId, role, jti: uniqueId }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
@@ -47,47 +62,100 @@ async function generateTokens(userId: string, role: string, req: Request) {
     data: {
       userId,
       refreshToken: hashRefreshToken(refreshToken),
-      userAgent: req.headers['user-agent'] || null,
+      deviceInfo: req.headers['user-agent'] || null,
       ipAddress: req.ip || null,
       expiresAt,
+      isRevoked: false,
     },
   });
 
   return { accessToken, refreshToken };
 }
 
+// ponytail: keep the select shape in one place
+const USER_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  email: true,
+  role: true,
+  readingLevel: true,
+  followedDomains: { include: { domain: { select: { id: true, name: true } } } },
+} as const;
+
+// ---- routes ----
+
 router.post('/register', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { username: rawUsername, displayName: rawName, email: rawEmail, password: rawPassword } = req.body || {};
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    // ---- required fields ----
+    if (!rawUsername || !rawName || !rawPassword) {
+      return res.status(400).json({ error: 'Username, display name, and password are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    // ---- sanitize ----
+    const username = sanitize(String(rawUsername));
+    const displayName = stripHtml(sanitize(String(rawName)));
+    const password = String(rawPassword);
+    const email = rawEmail ? sanitize(String(rawEmail)) : null;
+
+    // ---- suspicious check ----
+    if (suspicious(username) || suspicious(displayName) || (email && suspicious(email))) {
+      return res.status(400).json({ error: 'Input contains disallowed patterns' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    // ---- username validation ----
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters' });
+    }
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already in use' });
+    // ---- displayName validation ----
+    if (displayName.length < 1 || displayName.length > 100) {
+      return res.status(400).json({ error: 'Display name must be 1-100 characters' });
+    }
+
+    // ---- email validation (optional) ----
+    if (email) {
+      if (email.length > 254) {
+        return res.status(400).json({ error: 'Email must be at most 254 characters' });
+      }
+      if (!EMAIL_RE.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    }
+
+    // ---- password validation ----
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ error: 'Password must be 8-128 characters' });
+    }
+
+    // ---- uniqueness checks ----
+    const existingUsername = await prisma.user.findUnique({ where: { username } });
+    if (existingUsername) {
+      return res.status(400).json({ error: 'Username already in use' });
+    }
+
+    if (email) {
+      const existingEmail = await prisma.user.findUnique({ where: { email } });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        name,
+        username,
+        displayName,
         email,
-        password: hashedPassword,
-        preferences: { create: { domains: [] } },
+        passwordHash: hashedPassword,
       },
-      select: { id: true, name: true, email: true, role: true, preferences: true },
+      select: USER_SELECT,
     });
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
@@ -103,40 +171,38 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body || {};
+    const { login, password } = req.body || {};
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!login || !password) {
+      return res.status(400).json({ error: 'Login and password are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    const loginStr = sanitize(String(login));
+    const passwordStr = String(password);
+
+    if (suspicious(loginStr)) {
+      return res.status(400).json({ error: 'Input contains disallowed patterns' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email }, include: { preferences: true } });
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ username: loginStr }, { email: loginStr }] },
+      select: { ...USER_SELECT, passwordHash: true },
+    });
+
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid login or password' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(passwordStr, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid login or password' });
     }
 
     const { accessToken, refreshToken } = await generateTokens(user.id, user.role, req);
     setTokenCookie(req, res, accessToken, false);
     setTokenCookie(req, res, refreshToken, true);
 
-    let userPreferences = user.preferences;
-    if (!userPreferences) {
-      userPreferences = await prisma.userPreferences.create({
-        data: { userId: user.id, domains: [] },
-      });
-    }
-
-    const { password: _pw, ...userWithoutPassword } = user;
-    userWithoutPassword.preferences = userPreferences;
+    const { passwordHash: _, ...userWithoutPassword } = user;
     res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error('Login error:', error);
@@ -171,7 +237,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as { userId: string; role: string };
+    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as { userId: number; role: string };
     const session = await prisma.session.findUnique({
       where: { refreshToken: hashRefreshToken(refreshToken) },
     });
@@ -201,47 +267,44 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { preferences: true, savedCards: true },
+      include: { followedDomains: true, bookmarks: { include: { post: true } } },
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (!user.preferences) {
-      user.preferences = await prisma.userPreferences.create({
-        data: { userId: user.id, domains: [] },
-      });
-    }
+    const { passwordHash, bookmarks: userBookmarks, ...cleanUser } = user;
+    const bookmarkedPosts = userBookmarks.map((b) => b.post);
 
-    const { password, ...userWithoutPassword } = user;
-
-    if (user.savedCards && user.savedCards.length > 0) {
-      const cardIds = user.savedCards.map((c) => c.id);
-      const [likes, userLikes, comments] = await Promise.all([
-        prisma.like.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } }),
-        prisma.like.findMany({ where: { userId: user.id, cardId: { in: cardIds } } }),
-        prisma.comment.groupBy({ by: ['cardId'], where: { cardId: { in: cardIds } }, _count: { id: true } }),
+    if (bookmarkedPosts.length > 0) {
+      const postIds = bookmarkedPosts.map((c) => c.id);
+      const [reactions, userReactions, comments] = await Promise.all([
+        prisma.reaction.groupBy({ by: ['postId'], where: { postId: { in: postIds }, reactionType: 'LIKE' }, _count: { id: true } }),
+        prisma.reaction.findMany({ where: { userId: user.id, postId: { in: postIds }, reactionType: 'LIKE' } }),
+        prisma.comment.groupBy({ by: ['postId'], where: { postId: { in: postIds } }, _count: { id: true } }),
       ]);
 
-      const likesMap = Object.fromEntries(likes.map((l) => [l.cardId, l._count.id]));
-      const likedSet = new Set(userLikes.map((ul) => ul.cardId));
-      const commentsMap = Object.fromEntries(comments.map((c) => [c.cardId, c._count.id]));
+      const likesMap = Object.fromEntries(reactions.map((l) => [l.postId, l._count.id]));
+      const likedSet = new Set(userReactions.map((ul) => ul.postId));
+      const commentsMap = Object.fromEntries(comments.map((c) => [c.postId, c._count.id]));
 
-      userWithoutPassword.savedCards = user.savedCards.map((row) => ({
+      const enriched = bookmarkedPosts.map((row) => ({
         ...row,
         likeCount: likesMap[row.id] || 0,
         liked: likedSet.has(row.id),
         saved: true,
         commentsCount: commentsMap[row.id] || 0,
       }));
-    }
 
-    res.json({ success: true, data: userWithoutPassword });
+      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: enriched } });
+    } else {
+      res.json({ success: true, data: { ...cleanUser, followedDomains: user.followedDomains, bookmarks: [] } });
+    }
   } catch (error) {
     console.error('Fetch me error:', error);
     res.status(500).json({ error: 'Failed to fetch user data' });
   }
 });
 
-export = router;
+export default router;

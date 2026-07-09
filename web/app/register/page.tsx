@@ -7,19 +7,20 @@ import { authAPI } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function Register() {
-  const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
-  const { login } = useAuth();
+  const { login: doLogin } = useAuth();
 
-  const validatePassword = (pass: string) => {
-    if (pass.length < 8) return 'Password must be at least 8 characters';
-    if (!/[A-Za-z]/.test(pass) || !/[0-9]/.test(pass)) {
-      return 'Password must contain both letters and numbers';
-    }
+  const validate = () => {
+    if (!displayName.trim()) return 'Full Name is required';
+    if (username.length < 3) return 'Username must be at least 3 characters';
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return 'Username can only contain letters, numbers, and underscores';
+    if (password.length < 8) return 'Password must be at least 8 characters';
     return null;
   };
 
@@ -27,9 +28,9 @@ export default function Register() {
     e.preventDefault();
     if (isSubmitting) return;
 
-    const passError = validatePassword(password);
-    if (passError) {
-      setError(passError);
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -37,9 +38,9 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
-      const res = await authAPI.register({ name, email, password });
+      const res = await authAPI.register({ displayName, username, email: email.trim() || undefined, password });
       if (res.success) {
-        login(res.user);
+        doLogin(res.user ?? res.data);
         router.push('/');
       }
     } catch (err: unknown) {
@@ -53,8 +54,8 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <div className="max-w-md w-full bg-card rounded-2xl shadow-sm p-8 border border-border">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Create Account</h1>
-          <p className="text-muted-foreground mt-2">Join Knowledge Feed today</p>
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Summoning</h1>
+          <p className="text-muted-foreground mt-2">Bring my war chariot</p>
         </div>
         
         {error && (
@@ -69,9 +70,22 @@ export default function Register() {
             <input
               type="text"
               required
+              placeholder="Bishamonten"
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-foreground mb-2">Username</label>
+            <input
+              type="text"
+              required
+              placeholder="Bishamon"
+              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={isSubmitting}
             />
           </div>
@@ -79,7 +93,7 @@ export default function Register() {
             <label className="block text-sm font-bold text-foreground mb-2">Email</label>
             <input
               type="email"
-              required
+              placeholder="For now, it's optional."
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -91,13 +105,12 @@ export default function Register() {
             <input
               type="password"
               required
-              minLength={8}
+              placeholder="Don't tell anyone."
               className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-foreground"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isSubmitting}
             />
-            <p className="text-xs text-muted-foreground mt-2 font-medium">Must be at least 8 characters with letters and numbers</p>
           </div>
           <button
             type="submit"
@@ -106,14 +119,14 @@ export default function Register() {
               isSubmitting ? 'bg-primary/50 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 hover:shadow-md'
             }`}
           >
-            {isSubmitting ? 'Creating Account...' : 'Create Account'}
+            {isSubmitting ? 'Summoning...' : 'Summon!'}
           </button>
         </form>
 
         <p className="text-center mt-8 text-muted-foreground text-sm font-medium">
-          Already have an account?{' '}
+          Do you have your steed?{' '}
           <Link href="/login" className="text-primary hover:underline">
-            Sign in
+            Ride!
           </Link>
         </p>
       </div>

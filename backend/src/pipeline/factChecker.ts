@@ -225,7 +225,7 @@ export async function factCheckCard(card: { title: string; content: string; doma
   return result;
 }
 
-export async function saveFactCheckResults(cardId: string, factCheckResult: any) {
+export async function saveFactCheckResults(cardId: number, factCheckResult: any) {
   const records: any[] = [];
 
   for (const source of factCheckResult.sources) {

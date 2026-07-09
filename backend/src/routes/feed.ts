@@ -20,7 +20,22 @@ const clampLimit = (raw: any, max = 100, fallback = 20): number => {
   return Math.min(n, max);
 };
 
-const getUserId = (req: Request): string | null => (req.user ? req.user.userId : null);
+const getUserId = (req: Request): number | null => (req.user ? req.user.userId : null);
+
+// ponytail: batch-resolve domain names → IDs for DB queries
+async function resolveDomainIds(names: string[]): Promise<number[]> {
+  if (!names || names.length === 0) return [];
+  const domains = await prisma.domain.findMany({
+    where: { name: { in: names } },
+    select: { id: true },
+  });
+  return domains.map((d) => d.id);
+}
+
+const cardInclude = {
+  domain: { select: { name: true } },
+  hashtags: { include: { tag: { select: { name: true } } } },
+};
 
 /**
  * Memperkaya (enrich) daftar kartu pengetahuan dengan data interaksi pengguna
@@ -29,52 +44,50 @@ const getUserId = (req: Request): string | null => (req.user ? req.user.userId :
 async function enrichCardInteractions(cards: any[], userId: string | null) {
   if (!cards || cards.length === 0) return [];
 
+  const userIdNum = userId ? parseInt(userId, 10) : undefined;
   const cardIds = cards.map((c) => c.id);
 
-  const [likes, dislikes, userLikes, userDislikes, comments, savedCards] = await Promise.all([
-    prisma.like.groupBy({
-      by: ['cardId'],
-      where: { cardId: { in: cardIds } },
+  const [likeReactions, dislikeReactions, userLikes, userDislikes, comments, bookmarks] = await Promise.all([
+    prisma.reaction.groupBy({
+      by: ['postId'],
+      where: { postId: { in: cardIds }, reactionType: 'LIKE' },
       _count: { id: true },
     }),
-    prisma.dislike.groupBy({
-      by: ['cardId'],
-      where: { cardId: { in: cardIds } },
+    prisma.reaction.groupBy({
+      by: ['postId'],
+      where: { postId: { in: cardIds }, reactionType: 'DISLIKE' },
       _count: { id: true },
     }),
-    userId
-      ? prisma.like.findMany({ where: { userId, cardId: { in: cardIds } } })
+    userIdNum
+      ? prisma.reaction.findMany({ where: { userId: userIdNum, postId: { in: cardIds }, reactionType: 'LIKE' } })
       : Promise.resolve([]),
-    userId
-      ? prisma.dislike.findMany({ where: { userId, cardId: { in: cardIds } } })
+    userIdNum
+      ? prisma.reaction.findMany({ where: { userId: userIdNum, postId: { in: cardIds }, reactionType: 'DISLIKE' } })
       : Promise.resolve([]),
     prisma.comment.groupBy({
-      by: ['cardId'],
-      where: { cardId: { in: cardIds } },
+      by: ['postId'],
+      where: { postId: { in: cardIds }, isDeleted: false },
       _count: { id: true },
     }),
-    userId
-      ? prisma.user.findUnique({
-          where: { id: userId },
-          select: { savedCards: { select: { id: true } } },
-        })
-      : Promise.resolve(null),
+    userIdNum
+      ? prisma.bookmark.findMany({ where: { userId: userIdNum, postId: { in: cardIds } }, select: { postId: true } })
+      : Promise.resolve([]),
   ]);
 
-  const likesMap = Object.fromEntries(likes.map((l) => [l.cardId, l._count.id]));
-  const dislikesMap = Object.fromEntries(dislikes.map((d) => [d.cardId, d._count.id]));
-  const likedSet = new Set(userLikes.map((ul) => ul.cardId));
-  const dislikedSet = new Set(userDislikes.map((ud) => ud.cardId));
-  const commentsMap = Object.fromEntries(comments.map((c) => [c.cardId, c._count.id]));
-  const savedSet = new Set(savedCards?.savedCards?.map((sc: any) => sc.id) || []);
+  const likesMap = Object.fromEntries(likeReactions.map((l) => [l.postId, l._count.id]));
+  const dislikesMap = Object.fromEntries(dislikeReactions.map((d) => [d.postId, d._count.id]));
+  const likedSet = new Set(userLikes.map((ul) => ul.postId));
+  const dislikedSet = new Set(userDislikes.map((ud) => ud.postId));
+  const commentsMap = Object.fromEntries(comments.map((c) => [c.postId, c._count.id]));
+  const savedSet = new Set(bookmarks.map((b) => b.postId));
 
   return cards.map((row) => ({
     id: row.id,
     title: row.title,
     content: row.content,
     type: row.type,
-    domain: row.domain,
-    tags: row.tags,
+    domain: row.domain?.name ?? '',
+    tags: row.hashtags?.map((ph: any) => ph.tag?.name).filter(Boolean) ?? [],
     sourceUrl: row.sourceUrl || row.source_url,
     sourceName: row.sourceName || row.source_name,
     aiModel: row.aiModel || row.ai_model,
@@ -82,6 +95,7 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
     viewCount: row.viewCount || row.view_count,
     saveCount: row.saveCount || row.save_count || 0,
     shareCount: row.shareCount || row.share_count || 0,
+    repostCount: row.repostCount || row.repost_count || 0,
     engagementScore: row.engagementScore || row.engagement_score,
     factChecked: row.factChecked || row.fact_checked,
     factCheckScore: row.factCheckScore || row.fact_check_score,
@@ -99,10 +113,15 @@ async function enrichCardInteractions(cards: any[], userId: string | null) {
   }));
 }
 
-async function populateCacheIfNeeded(domainTarget: string, domainFilter: string[] | null) {
+async function populateCacheIfNeeded(domainTarget: string, domainNames: string[] | null) {
   try {
+    let domainIds: number[] | undefined;
+    if (domainNames && domainNames.length > 0) {
+      domainIds = await resolveDomainIds(domainNames);
+    }
     const cards = await prisma.knowledgeCard.findMany({
-      where: domainFilter ? { domain: { in: domainFilter } } : undefined,
+      where: domainIds ? { domainId: { in: domainIds } } : undefined,
+      include: cardInclude,
       take: 100,
       orderBy: { createdAt: 'desc' },
     });
@@ -138,9 +157,9 @@ router.get('/', async (req: Request, res: Response) => {
           : `multi:${[...domainFilter].sort().join(',')}`
         : '__all__';
 
-    let excludeIds: string[] = [];
+    let excludeNums: number[] = [];
     if (seenIds) {
-      excludeIds = String(seenIds).split(',').filter((id) => id.trim() !== '');
+      excludeNums = String(seenIds).split(',').filter((id) => id.trim() !== '').map(Number);
     }
 
     let cachedCards = await getDomainCache(domainTarget);
@@ -153,7 +172,7 @@ router.get('/', async (req: Request, res: Response) => {
     let usedCache = false;
 
     if (cachedCards && cachedCards.length > 0) {
-      const excludeSet = new Set(excludeIds);
+      const excludeSet = new Set(excludeNums);
       const filtered = cachedCards.filter((card: any) => !excludeSet.has(card.id));
       if (filtered.length >= limit) {
         cards = filtered.slice(0, limit);
@@ -164,11 +183,16 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (!usedCache) {
+      let domainIds: number[] | undefined;
+      if (domainFilter) {
+        domainIds = await resolveDomainIds(domainFilter);
+      }
       const dbCards = await prisma.knowledgeCard.findMany({
         where: {
-          domain: domainFilter ? { in: domainFilter } : undefined,
-          id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined,
+          domainId: domainIds ? { in: domainIds } : undefined,
+          id: excludeNums.length > 0 ? { notIn: excludeNums } : undefined,
         },
+        include: cardInclude,
         take: limit,
         orderBy: { createdAt: 'desc' },
       });
@@ -222,7 +246,7 @@ router.post('/personalized', async (req: Request, res: Response) => {
           ? domains[0]
           : `multi:${[...domains].sort().join(',')}`
         : '__all__';
-    const excludeIds: string[] = seenIds || [];
+    const excludeNums: number[] = (seenIds || []).map(Number);
 
     let cachedCards = await getDomainCache(domainTarget);
     if (!cachedCards || cachedCards.length === 0) {
@@ -233,7 +257,7 @@ router.post('/personalized', async (req: Request, res: Response) => {
     let usedCache = false;
 
     if (cachedCards && cachedCards.length > 0) {
-      const excludeSet = new Set(excludeIds);
+      const excludeSet = new Set(excludeNums);
       const filtered = cachedCards.filter((card: any) => !excludeSet.has(card.id));
       if (filtered.length >= limit) {
         cards = filtered.slice(0, limit);
@@ -244,11 +268,13 @@ router.post('/personalized', async (req: Request, res: Response) => {
     }
 
     if (!usedCache) {
+      const domainIds = await resolveDomainIds(domains);
       const dbCards = await prisma.knowledgeCard.findMany({
         where: {
-          domain: { in: domains },
-          id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined,
+          domainId: { in: domainIds },
+          id: excludeNums.length > 0 ? { notIn: excludeNums } : undefined,
         },
+        include: cardInclude,
         take: limit,
         orderBy: { createdAt: 'desc' },
       });
@@ -284,12 +310,15 @@ router.post('/refresh', authMiddleware, async (req: Request, res: Response) => {
     let targetFilterValue: string | string[] = filterValue;
 
     if (filterType === 'all') {
-      const userId = req.user!.userId;
-      const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
-      if (prefs && prefs.domains && prefs.domains.length > 0) {
+      const userIdNum = parseInt(String(req.user!.userId), 10);
+      const follows = await prisma.userFollowDomain.findMany({
+        where: { userId: userIdNum },
+        include: { domain: { select: { name: true } } },
+      });
+      if (follows.length > 0) {
         targetFilterType = 'preferences';
-        targetFilterValue = prefs.domains;
-        console.log(`[FeedRefresh] Loading preferences for user ${userId}: [${prefs.domains.join(', ')}]`);
+        targetFilterValue = follows.map((f: any) => f.domain.name);
+        console.log(`[FeedRefresh] Loading preferences for user ${userIdNum}: [${targetFilterValue.join(', ')}]`);
       }
     }
 
@@ -338,15 +367,18 @@ router.post('/refresh', authMiddleware, async (req: Request, res: Response) => {
 // GET /api/feed/refresh/sse
 router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) => {
   const { filterType = 'all', filterValue = 'Semua', seenIds } = req.query as Record<string, string>;
-  const userId = req.user!.userId;
+  const userIdNum = parseInt(String(req.user!.userId), 10);
 
   let targetFilterType = filterType;
   let targetFilterValue: string | string[] = filterValue;
   if (filterType === 'all') {
-    const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
-    if (prefs && prefs.domains && prefs.domains.length > 0) {
+    const follows = await prisma.userFollowDomain.findMany({
+      where: { userId: userIdNum },
+      include: { domain: { select: { name: true } } },
+    });
+    if (follows.length > 0) {
       targetFilterType = 'preferences';
-      targetFilterValue = prefs.domains;
+      targetFilterValue = follows.map((f: any) => f.domain.name);
     }
   }
 
@@ -359,25 +391,34 @@ router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) =
     domainFilter = Array.isArray(targetFilterValue) ? targetFilterValue : [];
   }
 
-  let viewedCardIds: string[] = [];
+  let viewedCardIds: number[] = [];
   try {
-    const views = await prisma.view.findMany({ where: { userId }, select: { cardId: true } });
-    viewedCardIds = views.map((v) => v.cardId);
+    const views = await prisma.postView.findMany({ where: { userId: userIdNum }, select: { postId: true } });
+    viewedCardIds = views.map((v) => v.postId);
   } catch (err: any) {
     console.error('[FeedRefreshSSE] Error loading user views:', err.message);
   }
 
-  const querySeenIds = seenIds ? String(seenIds).split(',').filter((id) => id.trim() !== '') : [];
+  const querySeenIds = seenIds ? String(seenIds).split(',').filter((id) => id.trim() !== '').map(Number) : [];
   const allSeenIds = Array.from(new Set([...viewedCardIds, ...querySeenIds]));
 
   let availableCards: any[] = [];
   try {
+    let domainIds: number[] | undefined;
+    if (domainFilter && domainFilter.length > 0) {
+      const domains = await prisma.domain.findMany({
+        where: { name: { in: domainFilter } },
+        select: { id: true },
+      });
+      domainIds = domains.map((d) => d.id);
+    }
     availableCards = await prisma.knowledgeCard.findMany({
       where: {
-        domain: domainFilter ? { in: domainFilter } : undefined,
+        domainId: domainIds ? { in: domainIds } : undefined,
         id: allSeenIds.length > 0 ? { notIn: allSeenIds } : undefined,
         moderationStatus: 'approved',
       },
+      include: cardInclude,
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
@@ -392,7 +433,7 @@ router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) =
   });
 
   if (availableCards.length > 0) {
-    const enrichedCards = await enrichCardInteractions(availableCards, userId);
+    const enrichedCards = await enrichCardInteractions(availableCards, String(userIdNum));
     res.write(`event: complete\ndata: ${JSON.stringify({ cards: enrichedCards, source: 'database' })}\n\n`);
     res.end();
     return;
@@ -405,7 +446,7 @@ router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) =
     return;
   }
 
-  const lockKey = `lock:refresh:user:${userId}`;
+  const lockKey = `lock:refresh:user:${userIdNum}`;
   let lockAcquired = false;
   try {
     // ponytail: ioredis overloads set() with strict KEEPTTL-vs-NX type guards.
@@ -457,9 +498,9 @@ router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) =
       }
     );
 
-    await invalidateUserCache(userId);
+    await invalidateUserCache(String(userIdNum));
 
-    const enrichedPublishedCards = await enrichCardInteractions(result.publishedCards || [], userId);
+    const enrichedPublishedCards = await enrichCardInteractions(result.publishedCards || [], String(userIdNum));
     sendEvent('complete', { cards: enrichedPublishedCards, source: 'pipeline' });
   } catch (error: any) {
     console.error('[FeedRefreshSSE] Pipeline error:', error);
@@ -474,4 +515,4 @@ router.get('/refresh/sse', authMiddleware, async (req: Request, res: Response) =
   }
 });
 
-export = router;
+export default router;
