@@ -25,8 +25,12 @@ model User {
   avatarUrl    String? @map("avatar_url")
 
   // app-specific (not in ERD, but needed)
-  role         String  @default("USER") // USER | ADMIN
+  role         String   @default("USER") // USER | ADMIN
   readingLevel String   @default("intermediate") @map("reading_level")
+  emailVerified Boolean @default(false) @map("email_verified")
+  isActive      Boolean @default(true)  @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  deletedAt     DateTime? @map("deleted_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

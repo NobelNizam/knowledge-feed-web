@@ -40,6 +40,9 @@ export default function Profile() {
             <div>
               <h1 className="text-2xl font-bold text-foreground tracking-tight">{user.displayName}</h1>
               <p className="text-muted-foreground text-sm">{user.email}</p>
+              {user.bio && (
+                <p className="text-muted-foreground text-sm mt-1">{user.bio}</p>
+              )}
             </div>
           </div>
           

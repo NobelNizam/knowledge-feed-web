@@ -386,6 +386,34 @@ router.post('/:id/share', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/knowledge/:id/repost
+router.post('/:id/repost', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const cardId = Number(req.params.id);
+
+    const card = await prisma.knowledgeCard.findUnique({ where: { id: cardId } });
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    const existingRepost = await prisma.repost.findUnique({
+      where: { userId_postId: { userId, postId: cardId } },
+    });
+
+    if (existingRepost) {
+      await prisma.repost.delete({ where: { userId_postId: { userId, postId: cardId } } });
+      const repostCount = await prisma.repost.count({ where: { postId: cardId } });
+      return res.json({ success: true, reposted: false, repostCount });
+    }
+
+    await prisma.repost.create({ data: { userId, postId: cardId } });
+    const repostCount = await prisma.repost.count({ where: { postId: cardId } });
+    res.json({ success: true, reposted: true, repostCount });
+  } catch (error) {
+    console.error('Repost error:', error);
+    res.status(500).json({ error: 'Failed to toggle repost' });
+  }
+});
+
 // POST /api/knowledge/:id/dislike
 router.post('/:id/dislike', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -542,6 +570,20 @@ router.post('/:id/comments', authMiddleware, async (req: Request, res: Response)
       },
       include: { user: { select: { id: true, displayName: true } } },
     });
+
+    const mentionPattern = /@([a-zA-Z0-9_]+)/g;
+    const mentionedUsernames = [...new Set([...text.matchAll(mentionPattern)].map(m => m[1]))];
+    if (mentionedUsernames.length > 0) {
+      const mentionedUsers = await prisma.user.findMany({
+        where: { username: { in: mentionedUsernames } },
+        select: { id: true },
+      });
+      if (mentionedUsers.length > 0) {
+        await prisma.mention.createMany({
+          data: mentionedUsers.map(u => ({ commentId: comment.id, mentionedUserId: u.id })),
+        }).catch(() => {});
+      }
+    }
 
     await updateEngagementScore(postId);
 
