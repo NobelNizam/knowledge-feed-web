@@ -21,6 +21,7 @@ export default function Home() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [availableDomains, setAvailableDomains] = useState<{id: number, name: string}[]>([]);
+  const [domainError, setDomainError] = useState(false);
 
   const currentDomainKey = activeFilter.type === 'all' 
     ? '__all__' 
@@ -74,12 +75,14 @@ export default function Home() {
       const res = await knowledgeAPI.getDomains();
       if (res.success && res.data?.length > 0) {
         setAvailableDomains(res.data);
+        setDomainError(false);
         return;
       }
     } catch (err) {
       console.error("Failed to fetch domains");
     }
-    setAvailableDomains([{id: 0, name: 'Science'}, {id: 0, name: 'History'}, {id: 0, name: 'Technology'}, {id: 0, name: 'Philosophy'}, {id: 0, name: 'Arts'}, {id: 0, name: 'Nature'}]);
+    setAvailableDomains([]);
+    setDomainError(true);
   };
 
   if (authLoading) {
@@ -106,10 +109,25 @@ export default function Home() {
   }
 
   return (
-    <div 
-      className="flex flex-col flex-1 pb-20 md:pb-0"
-      {...touchHandlers}
-    >
+    <>
+      {domainError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md">
+          <div className="w-full max-w-sm mx-4 bg-background/90 backdrop-blur-lg border border-border/80 p-6 rounded-2xl shadow-xl flex flex-col gap-4">
+            <h3 className="font-bold text-foreground text-sm">Koneksi Bermasalah</h3>
+            <p className="text-xs text-muted-foreground">Tidak dapat memuat data domain. Periksa koneksi internet Anda dan coba lagi.</p>
+            <button
+              onClick={() => { setDomainError(false); fetchAvailableDomains(); }}
+              className="w-full py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:bg-primary/90 transition-colors"
+            >
+              Coba Refresh
+            </button>
+          </div>
+        </div>
+      )}
+      <div 
+        className="flex flex-col flex-1 pb-20 md:pb-0"
+        {...touchHandlers}
+      >
       {/* Top Action Bar / Header */}
       <div className="sticky top-0 z-10 bg-background/70 backdrop-blur-md border-b border-border/55 shadow-sm">
         {/* Pull-to-refresh Indicator */}
@@ -297,6 +315,7 @@ export default function Home() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

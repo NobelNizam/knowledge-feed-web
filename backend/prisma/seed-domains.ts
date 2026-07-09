@@ -11,16 +11,17 @@ interface Level1Seed {
   level2: Level2Entry[];
 }
 
+// Source: DomainKnowledge.md + domainMapping.ts — English canonical naming
 const SEED_DATA: Level1Seed[] = [
   {
     name: "Formal Sciences",
     level2: [
-      "Matematika",
-      "Logika",
-      "Statistika",
-      "Ilmu Komputer Teoretis",
-      "Teori Informasi",
-      "Sistem Kompleks",
+      "Mathematics",
+      "Logic",
+      "Statistics",
+      "Theoretical Computer Science",
+      "Information Theory",
+      "Complex Systems",
       "Decision Science",
       "Game Theory",
     ],
@@ -29,69 +30,39 @@ const SEED_DATA: Level1Seed[] = [
     name: "Natural Sciences",
     level2: [
       {
-        name: "Fisika",
+        name: "Physics",
         hashtags: [
-          "Mekanika",
-          "Elektromagnetik",
-          "Optik",
-          "Termodinamika",
-          "Fisika Nuklir",
-          "Fisika Partikel",
-          "Relativitas",
-          "Quantum Physics",
-          "Astrofisika",
-          "Plasma",
+          "Mechanics", "Electromagnetism", "Optics", "Thermodynamics",
+          "Nuclear Physics", "Particle Physics", "Relativity",
+          "Quantum Physics", "Astrophysics", "Plasma",
         ],
       },
       {
-        name: "Kimia",
+        name: "Chemistry",
         hashtags: [
-          "Organik",
-          "Anorganik",
-          "Analitik",
-          "Fisik",
-          "Biokimia",
-          "Material",
-          "Polimer",
-          "Elektrokimia",
+          "Organic", "Inorganic", "Analytical", "Physical",
+          "Biochemistry", "Materials", "Polymers", "Electrochemistry",
         ],
       },
       {
-        name: "Biologi",
+        name: "Biology",
         hashtags: [
-          "Sel",
-          "Molekuler",
-          "Genetika",
-          "Evolusi",
-          "Ekologi",
-          "Mikrobiologi",
-          "Zoologi",
-          "Botani",
-          "Imunologi",
-          "Neurosains",
+          "Cell", "Molecular", "Genetics", "Evolution",
+          "Ecology", "Microbiology", "Zoology", "Botany",
+          "Immunology", "Neuroscience",
         ],
       },
       {
         name: "Earth Science",
         hashtags: [
-          "Geologi",
-          "Vulkanologi",
-          "Mineralogi",
-          "Seismologi",
-          "Paleontologi",
-          "Hidrologi",
-          "Oseanografi",
-          "Meteorologi",
-          "Klimatologi",
+          "Geology", "Volcanology", "Mineralogy", "Seismology",
+          "Paleontology", "Hydrology", "Oceanography", "Meteorology", "Climatology",
         ],
       },
       {
         name: "Astronomy",
         hashtags: [
-          "Planetary Science",
-          "Cosmology",
-          "Stellar Astronomy",
-          "Galactic Astronomy",
+          "Planetary Science", "Cosmology", "Stellar Astronomy", "Galactic Astronomy",
         ],
       },
     ],
@@ -106,29 +77,20 @@ const SEED_DATA: Level1Seed[] = [
       {
         name: "Electrical Engineering",
         hashtags: [
-          "Electronics",
-          "Embedded Systems",
-          "Signal Processing",
-          "Telecommunications",
-          "Control Systems",
+          "Electronics", "Embedded Systems", "Signal Processing",
+          "Telecommunications", "Control Systems",
         ],
       },
       {
         name: "Computer Engineering",
         hashtags: [
-          "Hardware",
-          "Operating Systems",
-          "Computer Architecture",
-          "IoT",
+          "Hardware", "Operating Systems", "Computer Architecture", "IoT",
         ],
       },
       {
         name: "Civil Engineering",
         hashtags: [
-          "Structural",
-          "Transportation",
-          "Water Resources",
-          "Construction",
+          "Structural", "Transportation", "Water Resources", "Construction",
         ],
       },
       "Chemical Engineering",
@@ -143,14 +105,8 @@ const SEED_DATA: Level1Seed[] = [
       {
         name: "Artificial Intelligence",
         hashtags: [
-          "Machine Learning",
-          "Deep Learning",
-          "Reinforcement Learning",
-          "Computer Vision",
-          "NLP",
-          "Robotics",
-          "AI Safety",
-          "Multi-Agent Systems",
+          "Machine Learning", "Deep Learning", "Reinforcement Learning",
+          "Computer Vision", "NLP", "Robotics", "AI Safety", "Multi-Agent Systems",
         ],
       },
     ],
@@ -158,43 +114,20 @@ const SEED_DATA: Level1Seed[] = [
   {
     name: "Medical & Health Sciences",
     level2: [
-      "Anatomy",
-      "Physiology",
-      "Pathology",
-      "Pharmacology",
-      "Surgery",
-      "Internal Medicine",
-      "Pediatrics",
-      "Psychiatry",
-      "Neurology",
-      "Cardiology",
-      "Oncology",
-      "Radiology",
-      "Public Health",
-      "Epidemiology",
-      "Nutrition",
-      "Dentistry",
-      "Nursing",
-      "Rehabilitation",
-      "Sports Medicine",
+      "Anatomy", "Physiology", "Pathology", "Pharmacology",
+      "Surgery", "Internal Medicine", "Pediatrics", "Psychiatry",
+      "Neurology", "Cardiology", "Oncology", "Radiology",
+      "Public Health", "Epidemiology", "Nutrition", "Dentistry",
+      "Nursing", "Rehabilitation", "Sports Medicine",
     ],
   },
   {
     name: "Agricultural & Environmental Sciences",
     level2: [
-      "Agriculture",
-      "Agronomy",
-      "Soil Science",
-      "Forestry",
-      "Fisheries",
-      "Aquaculture",
-      "Veterinary Medicine",
-      "Animal Science",
-      "Food Science",
-      "Environmental Science",
-      "Sustainability",
-      "Climate Science",
-      "Conservation Biology",
+      "Agriculture", "Agronomy", "Soil Science", "Forestry",
+      "Fisheries", "Aquaculture", "Veterinary Medicine", "Animal Science",
+      "Food Science", "Environmental Science", "Sustainability",
+      "Climate Science", "Conservation Biology",
     ],
   },
   {
@@ -203,44 +136,24 @@ const SEED_DATA: Level1Seed[] = [
       {
         name: "Economics",
         hashtags: [
-          "Micro",
-          "Macro",
-          "Econometrics",
-          "Behavioral Economics",
-          "Finance",
+          "Micro", "Macro", "Econometrics", "Behavioral Economics", "Finance",
         ],
       },
       {
         name: "Psychology",
         hashtags: [
-          "Cognitive",
-          "Clinical",
-          "Social",
-          "Developmental",
-          "Educational",
-          "Industrial-Organizational",
+          "Cognitive", "Clinical", "Social", "Developmental",
+          "Educational", "Industrial-Organizational",
         ],
       },
-      "Sociology",
-      "Anthropology",
-      "Political Science",
-      "International Relations",
-      "Public Administration",
-      "Law",
-      "Criminology",
-      "Communication",
-      "Education",
-      "Human Geography",
-      "Demography",
-      "Urban Studies",
+      "Sociology", "Anthropology", "Political Science",
+      "International Relations", "Public Administration", "Law",
+      "Criminology", "Communication", "Education",
+      "Human Geography", "Demography", "Urban Studies",
       {
         name: "Business",
         hashtags: [
-          "Management",
-          "Marketing",
-          "Accounting",
-          "Entrepreneurship",
-          "Supply Chain",
+          "Management", "Marketing", "Accounting", "Entrepreneurship", "Supply Chain",
         ],
       },
     ],
@@ -251,64 +164,30 @@ const SEED_DATA: Level1Seed[] = [
       {
         name: "Philosophy",
         hashtags: [
-          "Ethics",
-          "Metaphysics",
-          "Epistemology",
-          "Logic",
-          "Philosophy of Science",
+          "Ethics", "Metaphysics", "Epistemology", "Logic", "Philosophy of Science",
         ],
       },
-      "History",
-      "Archaeology",
-      "Linguistics",
-      "Literature",
-      "Religious Studies",
-      "Classics",
-      "Cultural Studies",
-      "Performing Arts",
-      "Music",
-      "Visual Arts",
-      "Film Studies",
-      "Architecture",
-      "Design",
+      "History", "Archaeology", "Linguistics", "Literature",
+      "Religious Studies", "Classics", "Cultural Studies",
+      "Performing Arts", "Music", "Visual Arts", "Film Studies",
+      "Architecture", "Design",
     ],
   },
   {
-    name: "Interdisciplinary Modern",
+    name: "Interdisciplinary Sciences",
     level2: [
-      "Data Science",
-      "Data Engineering",
-      "Bioinformatics",
-      "Computational Biology",
-      "Systems Biology",
-      "Computational Chemistry",
-      "Computational Physics",
-      "Scientific Computing",
-      "Human-Computer Interaction (HCI)",
-      "Computational Linguistics",
-      "Cognitive Science",
-      "Neuroscience",
-      "Behavioral Science",
-      "Complexity Science",
-      "Network Science",
-      "Digital Humanities",
-      "Geoinformatics",
-      "Geographic Information Systems (GIS)",
-      "Cybersecurity",
-      "Quantum Computing",
-      "FinTech",
-      "Health Informatics",
-      "Medical Imaging",
-      "Computational Social Science",
-      "Educational Technology",
-      "Explainable AI (XAI)",
-      "AI Alignment",
-      "AI Safety",
-      "Synthetic Biology",
-      "Precision Medicine",
-      "Computational Economics",
-      "Climate Informatics",
-      "Digital Twin Systems",
+      "Data Science", "Data Engineering", "Bioinformatics",
+      "Computational Biology", "Systems Biology", "Computational Chemistry",
+      "Computational Physics", "Scientific Computing",
+      "Human-Computer Interaction", "Computational Linguistics",
+      "Cognitive Science", "Neuroscience", "Behavioral Science",
+      "Complexity Science", "Network Science", "Digital Humanities",
+      "Geoinformatics", "Geographic Information Systems", "Cybersecurity",
+      "Quantum Computing", "FinTech", "Health Informatics",
+      "Medical Imaging", "Computational Social Science",
+      "Educational Technology", "Explainable AI", "AI Alignment",
+      "AI Safety", "Synthetic Biology", "Precision Medicine",
+      "Computational Economics", "Climate Informatics", "Digital Twin Systems",
     ],
   },
 ];
@@ -321,8 +200,41 @@ function parseLevel2(entry: Level2Entry): { name: string; hashtags: string[] } {
 }
 
 async function main() {
-  console.log("Seeding domains & hashtags...");
+  console.log("Seeding domains & hashtags from DomainKnowledge.md + domainMapping.ts...");
 
+  // 1. Delete all existing hashtags and domains not in the canonical list
+  const canonicalNames = new Set<string>();
+  for (const l1 of SEED_DATA) {
+    canonicalNames.add(l1.name);
+    for (const entry of l1.level2) {
+      const { name } = parseLevel2(entry);
+      canonicalNames.add(name);
+    }
+  }
+  const canonicalArr = [...canonicalNames];
+  console.log(`Canonical domain count: ${canonicalArr.length}`);
+
+  // Delete non-canonical hashtags
+  const staleTags = await prisma.hashtag.findMany({
+    where: { name: { notIn: canonicalArr } },
+    select: { name: true },
+  });
+  if (staleTags.length > 0) {
+    await prisma.hashtag.deleteMany({ where: { name: { notIn: canonicalArr } } });
+    console.log(`Deleted ${staleTags.length} stale hashtags`);
+  }
+
+  // Delete non-canonical domains
+  const staleDomains = await prisma.domain.findMany({
+    where: { name: { notIn: canonicalArr } },
+    select: { name: true },
+  });
+  if (staleDomains.length > 0) {
+    console.log(`Deleting stale domains: ${staleDomains.map(d => d.name).join(', ')}`);
+    await prisma.domain.deleteMany({ where: { name: { notIn: canonicalArr } } });
+  }
+
+  // 2. Upsert all canonicals
   for (const l1 of SEED_DATA) {
     const domain1 = await prisma.domain.upsert({
       where: { name: l1.name },
