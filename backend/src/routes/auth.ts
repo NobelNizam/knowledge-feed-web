@@ -273,7 +273,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
       include: {
-        followedDomains: true,
+        followedDomains: { include: { domain: { select: { id: true, name: true } } } },
         bookmarks: { include: { post: true } },
         reposts: { include: { post: true } },
         _count: { select: { followers: true, following: true } },

@@ -177,6 +177,20 @@ export default function ProfileSettings() {
               </div>
             </div>
 
+            {/* Upload Foto Avatar — coming soon */}
+            <div className="flex flex-col items-center gap-2 pt-1 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground font-semibold">Upload Foto</span>
+              <div className="relative w-full max-w-[200px]">
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled
+                  className="w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed cursor-not-allowed"
+                />
+                <span className="block text-center text-[10px] text-muted-foreground/60 mt-1 italic">Coming soon</span>
+              </div>
+            </div>
+
             {/* Bio Textarea */}
             <div className="flex flex-col gap-1.5">
               <label htmlFor="bio-textarea" className="text-xs font-semibold text-muted-foreground">Bio</label>
